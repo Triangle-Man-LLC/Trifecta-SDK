@@ -21,7 +21,7 @@ extern "C"
 #endif
 
     /// @brief Opaque saver context
-    typedef struct fs_save_t fs_save_t;
+    typedef struct fs_save fs_save_t;
     
     /// @brief Configuration for saver
     typedef struct fs_save_config_t

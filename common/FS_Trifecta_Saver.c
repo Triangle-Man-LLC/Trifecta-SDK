@@ -15,11 +15,14 @@
 
 typedef struct fs_save_device_t
 {
-    const fs_device_info_t *dev; // pointer only, not owned
+    const fs_device_info_t *dev;            // pointer only, not owned
+    fs_packet_ringbuffer_t packets_to_save; //
+    fs_run_status_t running;                //
+    fs_thread_t thread_handle;              // Handle for the saver thread
     FILE *file;
 } fs_save_device_t;
 
-struct fs_save_t
+struct fs_save
 {
     fs_save_config_t cfg;
     fs_save_device_t devices[FS_MAX_NUMBER_DEVICES];
@@ -92,72 +95,6 @@ static fs_save_device_t *add_device(fs_save_t *saver, const fs_device_info_t *de
     memset(d, 0, sizeof(*d));
     d->dev = dev;
     return d;
-}
-
-int fs_save_begin_device(fs_save_t *saver, const fs_device_info_t *dev)
-{
-    if (!saver || !dev)
-        return -1;
-
-    fs_save_device_t *d = find_device(saver, dev);
-    if (d && d->file)
-        return 0;
-
-    if (!d)
-        d = add_device(saver, dev);
-
-    if (!d)
-        return -2;
-
-    char filename[256];
-
-    if (saver->cfg.include_timestamp_in_filename)
-    {
-        fs_tm_t tmv;
-        fs_get_local_time(&tmv);
-
-        snprintf(filename, sizeof(filename),
-                 "%s%s_%04d%02d%02d%02d%02d%02d.csv",
-                 saver->cfg.filename_prefix ? saver->cfg.filename_prefix : "",
-                 dev->device_descriptor.device_name,
-                 tmv.year, tmv.month, tmv.day,
-                 tmv.hour, tmv.min, tmv.sec);
-    }
-    else
-    {
-        snprintf(filename, sizeof(filename),
-                 "%s%s.csv",
-                 saver->cfg.filename_prefix ? saver->cfg.filename_prefix : "",
-                 dev->device_descriptor.device_name);
-    }
-
-    char fullpath[512];
-    snprintf(fullpath, sizeof(fullpath), "%s/%s",
-             saver->cfg.output_directory ? saver->cfg.output_directory : ".",
-             filename);
-
-    d->file = fopen(fullpath, "w");
-    if (!d->file)
-        return -3;
-
-    if (saver->cfg.write_header)
-        write_header(d->file);
-
-    return 0;
-}
-
-int fs_save_end_device(fs_save_t *saver, const fs_device_info_t *dev)
-{
-    if (!saver || !dev)
-        return -1;
-
-    fs_save_device_t *d = find_device(saver, dev);
-    if (!d || !d->file)
-        return 0;
-
-    fclose(d->file);
-    d->file = NULL;
-    return 0;
 }
 
 static int format_packet(char *buf, size_t buf_size, const fs_packet_union_t *p)
@@ -316,6 +253,7 @@ static int format_packet(char *buf, size_t buf_size, const fs_packet_union_t *p)
         FMT(motion, "%u", p->composite2.device_motion_status);
         break;
     }
+#undef FMT
 
     return snprintf(
         buf, buf_size,
@@ -343,6 +281,120 @@ static int format_packet(char *buf, size_t buf_size, const fs_packet_union_t *p)
         rx, ry, rz,
         t0, t1, t2,
         motion);
+}
+
+static fs_thread_func_t save_thread_func(void *arg)
+{
+    fs_save_device_t *d = (fs_save_device_t *)arg;
+    if (!d || !d->file)
+        return FS_THREAD_RETVAL;
+
+    // Enable large buffered writes
+    setvbuf(d->file, NULL, _IOFBF, 64 * 1024);
+
+    fs_packet_union_t packet = {0};
+    char linebuf[1024] = {0};
+    int flush_counter = 0;
+
+    while (d->running == FS_RUN_STATUS_RUNNING)
+    {
+        if (FS_RINGBUFFER_POP(&d->packets_to_save, FS_MAX_PACKET_QUEUE_LENGTH, &packet))
+        {
+            if (format_packet(linebuf, sizeof(linebuf), &packet) == 0)
+            {
+                fprintf(d->file, "%s\n", linebuf);
+
+                if (++flush_counter >= 200)
+                {
+                    fflush(d->file);
+                    flush_counter = 0;
+                }
+            }
+        }
+        else
+        {
+            fs_delay(5);
+        }
+    }
+
+    fflush(d->file);
+    fclose(d->file);
+    d->file = NULL;
+    return FS_THREAD_RETVAL;
+}
+
+int fs_save_begin_device(fs_save_t *saver, const fs_device_info_t *dev)
+{
+    if (!saver || !dev)
+        return -1;
+
+    fs_save_device_t *d = find_device(saver, dev);
+    if (d && d->file)
+        return 0;
+
+    if (!d)
+        d = add_device(saver, dev);
+
+    if (!d)
+        return -2;
+
+    char filename[256] = {0};
+
+    if (saver->cfg.include_timestamp_in_filename)
+    {
+        fs_tm_t tmv;
+        fs_get_local_time(&tmv);
+
+        snprintf(filename, sizeof(filename),
+                 "%s%s_%04d%02d%02d%02d%02d%02d.csv",
+                 saver->cfg.filename_prefix ? saver->cfg.filename_prefix : "",
+                 dev->device_descriptor.device_name,
+                 tmv.year, tmv.month, tmv.day,
+                 tmv.hour, tmv.min, tmv.sec);
+    }
+    else
+    {
+        snprintf(filename, sizeof(filename),
+                 "%s%s.csv",
+                 saver->cfg.filename_prefix ? saver->cfg.filename_prefix : "",
+                 dev->device_descriptor.device_name);
+    }
+
+    char fullpath[512] = {0};
+    snprintf(fullpath, sizeof(fullpath), "%s/%s",
+             saver->cfg.output_directory ? saver->cfg.output_directory : ".",
+             filename);
+
+    d->file = fopen(fullpath, "w");
+    if (!d->file)
+        return -3;
+
+    if (saver->cfg.write_header)
+        write_header(d->file);
+
+    // Note: The thread running flag is set to RUNNING by the thread start function on success.
+    if (fs_thread_start(save_thread_func, (void *)d, &d->running, &d->thread_handle, -1, -1, -1) != 0)
+    {
+        fclose(d->file);
+        d->file = NULL;
+        return -4;
+    }
+    return 0;
+}
+
+int fs_save_end_device(fs_save_t *saver, const fs_device_info_t *dev)
+{
+    if (!saver || !dev)
+        return -1;
+
+    fs_save_device_t *d = find_device(saver, dev);
+    if (!d || !d->file)
+        return 0;
+
+    d->running = FS_RUN_STATUS_IDLE;
+    // The thread will flush and exit on its own after seeing the running flag change.
+    // This prevents a potential race condition involving the save file.
+    return 0;
 }
 
 int fs_save_on_packet(fs_save_t *saver,

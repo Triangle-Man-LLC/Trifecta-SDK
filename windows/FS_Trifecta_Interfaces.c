@@ -268,7 +268,7 @@ int fs_get_local_time(fs_tm_t *out)
         return -1;
 
     time_t t = time(NULL);
-    struct tm tmv;
+    struct tm tmv = {0};
 
     localtime_s(&tmv, &t);
 
