@@ -69,7 +69,7 @@ int fs_thread_start(fs_thread_func_t (*thread_func)(void *), void *params, fs_ru
 
     if (a_thread_handle == 0)
     {
-        fs_log_output("[Trifecta-Interface] Error: Thread creation failed: errno %d!\n", errno);
+        fs_log_critical("[Trifecta-Interface] Error: Thread creation failed: errno %d!\n", errno);
         *thread_running_flag = FS_RUN_STATUS_ERROR;
         return -1;
     }

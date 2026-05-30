@@ -13,22 +13,6 @@
 
 #define LINEBUF_SIZE 1024
 
-typedef struct fs_save_device_t
-{
-    const fs_device_info_t *dev;            // pointer only, not owned
-    fs_packet_ringbuffer_t packets_to_save; //
-    fs_run_status_t running;                //
-    fs_thread_t thread_handle;              // Handle for the saver thread
-    FILE *file;
-} fs_save_device_t;
-
-struct fs_save
-{
-    fs_save_config_t cfg;
-    fs_save_device_t devices[FS_MAX_NUMBER_DEVICES];
-    int device_count;
-};
-
 static void write_header(FILE *f)
 {
     fputs(
@@ -47,22 +31,23 @@ static void write_header(FILE *f)
         f);
 }
 
-fs_save_t *fs_save_create(const fs_save_config_t *cfg)
+int fs_save_init(fs_save_t *saver, const fs_save_config_t *cfg)
 {
-    fs_save_t *s = (fs_save_t *)calloc(1, sizeof(fs_save_t));
-    if (!s)
-        return NULL;
+    if (!saver)
+        return -1;
+
+    fs_save_destroy(saver);
 
     if (cfg)
-        s->cfg = *cfg;
+        saver->cfg = *cfg;
     else
     {
-        memset(&s->cfg, 0, sizeof(s->cfg));
-        s->cfg.write_header = 1;
-        s->cfg.include_timestamp_in_filename = 1;
+        memset(&saver->cfg, 0, sizeof(saver->cfg));
+        saver->cfg.write_header = 1;
+        saver->cfg.include_timestamp_in_filename = 1;
     }
 
-    return s;
+    return 0;
 }
 
 void fs_save_destroy(fs_save_t *saver)
@@ -71,10 +56,8 @@ void fs_save_destroy(fs_save_t *saver)
         return;
 
     for (int i = 0; i < saver->device_count; ++i)
-        if (saver->devices[i].file)
-            fclose(saver->devices[i].file);
-
-    free(saver);
+        if (saver->devices[i].running == FS_RUN_STATUS_RUNNING)
+            saver->devices[i].running = FS_RUN_STATUS_IDLE;
 }
 
 static fs_save_device_t *find_device(fs_save_t *saver, const fs_device_info_t *dev)
@@ -93,6 +76,7 @@ static fs_save_device_t *add_device(fs_save_t *saver, const fs_device_info_t *de
 
     fs_save_device_t *d = &saver->devices[saver->device_count++];
     memset(d, 0, sizeof(*d));
+    FS_RINGBUFFER_INIT(&d->packets_to_save);
     d->dev = dev;
     return d;
 }
@@ -288,9 +272,14 @@ static fs_thread_func_t save_thread_func(void *arg)
     fs_save_device_t *d = (fs_save_device_t *)arg;
     if (!d || !d->file)
         return FS_THREAD_RETVAL;
+        
+    fprintf(stderr, "THREAD START: d=%p file=%p running=%d\n",
+            (void*)d, (void*)d->file, d->running);
 
     // Enable large buffered writes
-    setvbuf(d->file, NULL, _IOFBF, 64 * 1024);
+    // setvbuf(d->file, NULL, _IOFBF, 64 * 1024);
+
+    write_header(d->file);
 
     fs_packet_union_t packet = {0};
     char linebuf[1024] = {0};
@@ -298,11 +287,11 @@ static fs_thread_func_t save_thread_func(void *arg)
 
     while (d->running == FS_RUN_STATUS_RUNNING)
     {
-        if (FS_RINGBUFFER_POP(&d->packets_to_save, FS_MAX_PACKET_QUEUE_LENGTH, &packet))
+        while (FS_RINGBUFFER_POP(&d->packets_to_save, FS_MAX_PACKET_QUEUE_LENGTH, &packet))
         {
-            if (format_packet(linebuf, sizeof(linebuf), &packet) == 0)
+            if (format_packet(linebuf, sizeof(linebuf), &packet) > 0)
             {
-                fprintf(d->file, "%s\n", linebuf);
+                fprintf(d->file, "%s", linebuf);
 
                 if (++flush_counter >= 200)
                 {
@@ -311,12 +300,9 @@ static fs_thread_func_t save_thread_func(void *arg)
                 }
             }
         }
-        else
-        {
-            fs_delay(5);
-        }
-    }
 
+        fs_delay(5);
+    }
     fflush(d->file);
     fclose(d->file);
     d->file = NULL;
@@ -369,11 +355,8 @@ int fs_save_begin_device(fs_save_t *saver, const fs_device_info_t *dev)
     if (!d->file)
         return -3;
 
-    if (saver->cfg.write_header)
-        write_header(d->file);
-
     // Note: The thread running flag is set to RUNNING by the thread start function on success.
-    if (fs_thread_start(save_thread_func, (void *)d, &d->running, &d->thread_handle, -1, -1, -1) != 0)
+    if (fs_thread_start(save_thread_func, (void *)d, &d->running, &d->thread_handle, 0, -1, -1) != 0)
     {
         fclose(d->file);
         d->file = NULL;
@@ -403,23 +386,19 @@ int fs_save_on_packet(fs_save_t *saver,
 {
     if (!saver || !dev || !packet)
         return -1;
-
     fs_save_device_t *d = find_device(saver, dev);
     if (!d || !d->file)
     {
         int r = fs_save_begin_device(saver, dev);
         if (r != 0)
-            return r;
+            return -10 + r;
         d = find_device(saver, dev);
         if (!d || !d->file)
             return -2;
     }
-
-    char line[LINEBUF_SIZE];
-    int len = format_packet(line, sizeof(line), packet);
-    if (len <= 0 || len >= (int)sizeof(line))
+    if (!FS_RINGBUFFER_PUSH(&d->packets_to_save, FS_MAX_PACKET_QUEUE_LENGTH, packet))
+    {
         return -3;
-
-    size_t written = fwrite(line, 1, (size_t)len, d->file);
-    return (written == (size_t)len) ? 0 : -4;
+    }
+    return 0;
 }

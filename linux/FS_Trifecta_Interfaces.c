@@ -72,21 +72,16 @@ int fs_thread_start(fs_thread_func_t (*thread_func)(void *), void *params, fs_ru
             fs_log_output("[Trifecta] Warning: Failed to set stack size!\n");
         }
     }
-    if (priority < 0)
-    {
-        priority = sched_get_priority_min(SCHED_OTHER); // Default priority, lowest valid
-    }
-    if (core_affinity < 0)
-    {
-        core_affinity = -1; // Indifferent to core affinity
-    }
 
-    // Set thread priority if supported
-    struct sched_param param;
-    param.sched_priority = priority;
-    if (pthread_attr_setschedparam(&attr, &param) != 0)
+    if (priority >= 0)
     {
-        fs_log_output("[Trifecta] Warning: Failed to set thread priority!\n");
+        // Set thread priority if supported
+        struct sched_param param;
+        param.sched_priority = priority;
+        if (pthread_attr_setschedparam(&attr, &param) != 0)
+        {
+            fs_log_output("[Trifecta] Warning: Failed to set thread priority!\n");
+        }
     }
 
     // Set CPU core affinity if specified and supported
@@ -111,7 +106,7 @@ int fs_thread_start(fs_thread_func_t (*thread_func)(void *), void *params, fs_ru
 
     if (result != 0)
     {
-        fs_log_output("[Trifecta] Error: Thread creation failed: errno %d!\n", errno);
+        fs_log_critical("[Trifecta] Error: Thread creation failed: errno %d!\n", errno);
         *thread_running_flag = FS_RUN_STATUS_ERROR;
         return -1;
     }
@@ -340,12 +335,12 @@ int fs_get_local_time(fs_tm_t *out)
 
     localtime_r(&t, &tmv);
 
-    out->year  = tmv.tm_year + 1900;
+    out->year = tmv.tm_year + 1900;
     out->month = tmv.tm_mon + 1;
-    out->day   = tmv.tm_mday;
-    out->hour  = tmv.tm_hour;
-    out->min   = tmv.tm_min;
-    out->sec   = tmv.tm_sec;
+    out->day = tmv.tm_mday;
+    out->hour = tmv.tm_hour;
+    out->min = tmv.tm_min;
+    out->sec = tmv.tm_sec;
 
     return 0;
 }

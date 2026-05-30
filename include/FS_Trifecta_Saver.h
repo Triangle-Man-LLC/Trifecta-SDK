@@ -20,9 +20,6 @@ extern "C"
 {
 #endif
 
-    /// @brief Opaque saver context
-    typedef struct fs_save fs_save_t;
-    
     /// @brief Configuration for saver
     typedef struct fs_save_config_t
     {
@@ -38,10 +35,30 @@ extern "C"
         /// If non-zero, write CSV header line at file creation
         int write_header;
     } fs_save_config_t;
+    
+    /// @brief Opaque saver context - user should not call these fields directly
+    typedef struct fs_save_device_t
+    {
+        const fs_device_info_t *dev;            // pointer only, not owned
+        fs_packet_ringbuffer_t packets_to_save; //
+        fs_run_status_t running;                //
+        fs_thread_t thread_handle;              // Handle for the saver thread
+        FILE *file;
+    } fs_save_device_t;
 
-    /// @brief Create a saver context
-    /// @return NULL on failure.
-    fs_save_t *fs_save_create(const fs_save_config_t *cfg);
+    typedef struct fs_save
+    {
+        fs_save_config_t cfg;
+        fs_save_device_t devices[FS_MAX_NUMBER_DEVICES];
+        int device_count;
+    } fs_save_t;
+
+
+    /// @brief Create and initialize a saver context with the given configuration.
+    /// @param saver Pointer to saver context to initialize (must not be NULL)
+    /// @param cfg Configuration for the saver (if NULL, defaults will be used)
+    /// @return 0 on success, non-zero on error
+    int fs_save_init(fs_save_t *saver, const fs_save_config_t *cfg);
 
     /// @brief Destroy saver context and close all open files
     void fs_save_destroy(fs_save_t *saver);
