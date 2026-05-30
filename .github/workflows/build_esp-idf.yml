@@ -53,6 +53,24 @@ jobs:
           cd $GITHUB_WORKSPACE/espidf_sample
           idf.py clean
 
+      - name: Set ESP-IDF target platform (ESP32-C6)
+        run: |
+          . $HOME/esp-idf-5_5/export.sh
+          cd $GITHUB_WORKSPACE/espidf_sample
+          idf.py set-target esp32c6
+
+      - name: Build with idf.py
+        run: |
+          . $HOME/esp-idf-5_5/export.sh
+          cd $GITHUB_WORKSPACE/espidf_sample
+          idf.py build
+        
+      - name: Cleanup build files
+        run: |
+          . $HOME/esp-idf-5_5/export.sh
+          cd $GITHUB_WORKSPACE/espidf_sample
+          idf.py clean
+
       - name: Set ESP-IDF target platform (ESP32-S3)
         run: |
           . $HOME/esp-idf-5_5/export.sh
