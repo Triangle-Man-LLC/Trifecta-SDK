@@ -72,21 +72,16 @@ int fs_thread_start(fs_thread_func_t (*thread_func)(void *), void *params, fs_ru
             fs_log_output("[Trifecta] Warning: Failed to set stack size!\n");
         }
     }
-    if (priority < 0)
-    {
-        priority = sched_get_priority_min(SCHED_OTHER); // Default priority, lowest valid
-    }
-    if (core_affinity < 0)
-    {
-        core_affinity = -1; // Indifferent to core affinity
-    }
 
-    // Set thread priority if supported
-    struct sched_param param;
-    param.sched_priority = priority;
-    if (pthread_attr_setschedparam(&attr, &param) != 0)
+    if (priority >= 0)
     {
-        fs_log_output("[Trifecta] Warning: Failed to set thread priority!\n");
+        // Set thread priority if supported
+        struct sched_param param;
+        param.sched_priority = priority;
+        if (pthread_attr_setschedparam(&attr, &param) != 0)
+        {
+            fs_log_output("[Trifecta] Warning: Failed to set thread priority!\n");
+        }
     }
 
     // Set CPU core affinity if specified and supported
@@ -111,7 +106,7 @@ int fs_thread_start(fs_thread_func_t (*thread_func)(void *), void *params, fs_ru
 
     if (result != 0)
     {
-        fs_log_output("[Trifecta] Error: Thread creation failed: errno %d!\n", errno);
+        fs_log_critical("[Trifecta] Error: Thread creation failed: errno %d!\n", errno);
         *thread_running_flag = FS_RUN_STATUS_ERROR;
         return -1;
     }
@@ -296,7 +291,7 @@ int fs_delay(int millis)
 /// @param current_time Pointer to the current time
 /// @param millis The exact amount of time to delay
 /// @return The number of ticks the delay lasted
-int fs_delay_for(uint32_t *current_time, int millis)
+int fs_delay_for(uint64_t *current_time, int millis)
 {
     if (current_time == NULL)
     {
@@ -310,7 +305,7 @@ int fs_delay_for(uint32_t *current_time, int millis)
 
     clock_gettime(CLOCK_MONOTONIC, &end);
 
-    uint32_t elapsed_ms = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_nsec - start.tv_nsec) / 1000000;
+    uint64_t elapsed_ms = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_nsec - start.tv_nsec) / 1000000;
 
     *current_time += elapsed_ms;
     return elapsed_ms;
@@ -319,7 +314,7 @@ int fs_delay_for(uint32_t *current_time, int millis)
 /// @brief Get the current system time
 /// @param current_time Pointer to the current time
 /// @return 0 on success
-int fs_get_current_time(uint32_t *current_time)
+int fs_get_current_time(uint64_t *current_time)
 {
     struct timespec ts;
     if (clock_gettime(CLOCK_REALTIME, &ts) == -1)
@@ -327,5 +322,25 @@ int fs_get_current_time(uint32_t *current_time)
         return -1;
     }
     *current_time = ts.tv_sec * 1000 + ts.tv_nsec / 1000000; // Convert to milliseconds
+    return 0;
+}
+
+int fs_get_local_time(fs_tm_t *out)
+{
+    if (!out)
+        return -1;
+
+    time_t t = time(NULL);
+    struct tm tmv;
+
+    localtime_r(&t, &tmv);
+
+    out->year = tmv.tm_year + 1900;
+    out->month = tmv.tm_mon + 1;
+    out->day = tmv.tm_mday;
+    out->hour = tmv.tm_hour;
+    out->min = tmv.tm_min;
+    out->sec = tmv.tm_sec;
+
     return 0;
 }
