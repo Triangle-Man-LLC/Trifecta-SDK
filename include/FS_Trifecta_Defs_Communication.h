@@ -20,14 +20,6 @@
 #include <string.h>
 #include <math.h>
 
-#define FS_TRIFECTA_PORT 8888
-
-#define FS_TRIFECTA_SERIAL_BAUDRATE 2000000
-#define FS_MAX_DATA_LENGTH 512
-
-#define FS_MAX_CMD_QUEUE_LENGTH 16
-#define FS_MAX_CMD_LENGTH 256
-
 #ifdef __cplusplus
 extern "C"
 {

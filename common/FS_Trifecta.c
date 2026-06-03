@@ -73,6 +73,45 @@ int fs_set_driver_parameters(fs_device_info_t *device_handle, fs_driver_config_t
   return 0;
 }
 
+ssize_t fs_obtain_network_devices_list(char ip_addr_list[FS_MAX_NUMBER_DEVICES][FS_MAX_IP_ADDRESS_LENGTH], int timeout_micros)
+{
+  if (ip_addr_list == NULL)
+  {
+    fs_log_critical("[Trifecta-Network] Error: IP address list is NULL!");
+    return -1;
+  }
+
+  int num_devices = fs_listen_for_udp_broadcasts(ip_addr_list, timeout_micros);
+  if (num_devices < 0)
+  {
+    fs_log_critical("[Trifecta-Network] Error: Failed to obtain network devices list!");
+    return -1;
+  }
+  fs_log_output("[Trifecta-Network] Info: Discovered %d device(s) on the network.\n", num_devices);
+  return num_devices;
+}
+
+ssize_t fs_obtain_serial_devices_list(char device_path_list[FS_MAX_NUMBER_DEVICES][FS_MAX_DEVICE_PATH_LENGTH], int timeout_micros)
+{
+  if (device_path_list == NULL)
+  {
+    fs_log_critical("[Trifecta-Serial] Error: Device path list is NULL!");
+    return -1;
+  }
+  // TODO: Implement serial device enumeration for embedded platforms.
+  // This requires sending the device model version request command and checking responses to identify devices.
+
+  int num_devices = 0;                                                                           // fs_enumerate_serial_ports(device_path_list, &num_devices, timeout_micros);
+  memset(device_path_list, 0, sizeof(char) * FS_MAX_NUMBER_DEVICES * FS_MAX_DEVICE_PATH_LENGTH); // Placeholder for now, set path list length to 0...
+  // if (num_devices < 0)
+  // {
+  //   fs_log_critical("[Trifecta-Serial] Error: Failed to obtain serial devices list!");
+  //   return -1;
+  // }
+
+  return num_devices;
+}
+
 int fs_initialize_networked(fs_device_info_t *device_handle, const char *device_ip_address)
 {
   if (device_handle->device_params.status == FS_RUN_STATUS_RUNNING)
@@ -306,6 +345,11 @@ int fs_set_communication_mode(fs_device_info_t *device_handle, int modes)
 int fs_set_network_parameters(fs_device_info_t *device_handle, const char ssid[32], const char pw[64], bool access_point)
 {
   char send_buf[2 * FS_MAX_CMD_LENGTH];
+  if (device_handle->device_params.communication_mode == FS_COMMUNICATION_MODE_TCP_UDP ||
+      device_handle->device_params.communication_mode == FS_COMMUNICATION_MODE_TCP_UDP_AP)
+  {
+    return -1; // Not allowed to transmit any network information over Wi-Fi!
+  }
   if (access_point)
   {
     snprintf(send_buf, 2 * FS_MAX_CMD_LENGTH, ";%c%s;%c%s;", CMD_SET_SSID_AP, ssid, CMD_SET_PASSWORD_AP, pw);
