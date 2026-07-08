@@ -38,6 +38,12 @@
 #error "Unsupported STM32 series"
 #endif
 
+ssize_t fs_listen_for_udp_broadcasts(char ip_addr_list[FS_MAX_NUMBER_DEVICES][64],
+                                     int timeout_micros)
+{
+    return -1;
+}
+
 int fs_init_network_tcp_driver(fs_device_info_t *device_handle)
 {
     fs_log_critical("[Trifecta] The STM32F4 platform does not support TCP network connections!");

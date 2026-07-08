@@ -23,7 +23,7 @@
 #define FS_MAX_PACKET_QUEUE_LENGTH 16
 #define FS_MAX_PACKET_LENGTH 256
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER)
 #define FS_PACKED_BEGIN __pragma(pack(push, 1))
 #define FS_PACKED_END __pragma(pack(pop))
 #else
@@ -31,11 +31,29 @@
 #define FS_PACKED_END __attribute__((packed))
 #endif
 
-#ifdef __cplusplus
-#define FS_STATIC_ASSERT static_assert
+#if defined(_MSC_VER)
+
+    #ifdef __cplusplus
+        // MSVC C++ mode: static_assert is available
+        #define FS_STATIC_ASSERT(cond, msg) static_assert((cond), msg)
+    #else
+        // MSVC C mode: typedef trick WITHOUT token pasting the message
+        #define FS_STATIC_ASSERT(cond, msg) \
+            typedef char static_assertion_failed[(cond) ? 1 : -1]
+    #endif
+
+#elif defined(__cplusplus)
+
+    // GCC/Clang C++
+    #define FS_STATIC_ASSERT(cond, msg) static_assert((cond), msg)
+
 #else
-#define FS_STATIC_ASSERT _Static_assert
+
+    // GCC/Clang C11 C
+    #define FS_STATIC_ASSERT(cond, msg) _Static_assert((cond), msg)
+
 #endif
+
 
 #ifdef __cplusplus
 extern "C"
@@ -134,14 +152,14 @@ extern "C"
     /// @brief
     typedef enum fs_device_diagnostic_flags
     {
-        FS_DEVICE_DIAG_UTC_SYNCED = 0x01, // Clock is synchronized with UTC by means of GNSS
+        FS_DEVICE_DIAG_UTC_SYNCED = 0x01,     // Clock is synchronized with UTC by means of GNSS
         FS_DEVICE_DIAG_GNSS_AVAILABLE = 0x02, // GNSS solution available (at least SPP)
-        FS_DEVICE_DIAG_IMU_AVAILABLE = 0x04, // IMU status OK
-        FS_DEVICE_DIAG_GNSS_DGPS = 0x08, // GNSS solution corrected by DGPS or SBAS
+        FS_DEVICE_DIAG_IMU_AVAILABLE = 0x04,  // IMU status OK
+        FS_DEVICE_DIAG_GNSS_DGPS = 0x08,      // GNSS solution corrected by DGPS or SBAS
         FS_DEVICE_DIAG_GNSS_RTK_FLOAT = 0x10, // GNSS solution is RTK FLOAT
-        FS_DEVICE_DIAG_GNSS_RTK_FIX = 0x20, // GNSS solution is RTK FIX
-        FS_DEVICE_DIAG_GNSS_RTK_MB = 0x40, // GNSS RTK moving baseline solution acquired
-        FS_DEVICE_DIAG_GNSS_RTK_EXT = 0x80, // GNSS RTK is fixed on external base station (e.g. valid RTCM input received)
+        FS_DEVICE_DIAG_GNSS_RTK_FIX = 0x20,   // GNSS solution is RTK FIX
+        FS_DEVICE_DIAG_GNSS_RTK_MB = 0x40,    // GNSS RTK moving baseline solution acquired
+        FS_DEVICE_DIAG_GNSS_RTK_EXT = 0x80,   // GNSS RTK is fixed on external base station (e.g. valid RTCM input received)
     } fs_device_diagnostic_flags_t;
 
     FS_PACKED_BEGIN
@@ -474,6 +492,16 @@ extern "C"
     } FS_PACKED_END;
     typedef union fs_packet_union fs_packet_union_t;
     FS_STATIC_ASSERT(sizeof(fs_packet_union_t) == 185, "fs_packet_union_t size mismatch");
+
+    FS_PACKED_BEGIN
+    struct fs_device_broadcast_information_packet
+    {
+        uint32_t magic_number; // == 0x88886868
+        char device_name[32];  // Device name
+        char device_ip[39];    // Device IP address in string format (supports IPv6)
+    } FS_PACKED_END;
+    typedef struct fs_device_broadcast_information_packet fs_device_broadcast_information_packet_t;
+
 #ifdef __cplusplus
 }
 #endif

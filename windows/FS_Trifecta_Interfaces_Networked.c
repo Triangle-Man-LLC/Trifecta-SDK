@@ -15,10 +15,9 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #pragma warning(push)
-#pragma warning(disable:5105)
+#pragma warning(disable : 5105)
 #include <windows.h>
 #pragma warning(pop)
-
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -37,6 +36,142 @@
 
 // Platform-specific: Functions for initializing communication drivers on target platform
 #pragma comment(lib, "ws2_32.lib")
+
+/// @brief Listens for UDP broadcasts from devices on the network and retrieves their IP addresses.
+/// This is useful for device discovery when the IP address is not known beforehand.
+/// @param ip_addr_list
+/// @param timeout_micros
+/// @return Number of devices discovered on success, or a negative error code on failure.
+ssize_t fs_listen_for_udp_broadcasts(char ip_addr_list[FS_MAX_NUMBER_DEVICES][64],
+                                     int timeout_micros)
+{
+    static SOCKET broadcast_sock = INVALID_SOCKET;
+
+    if (!ip_addr_list)
+        return -1;
+
+    // Create and bind the broadcast socket once
+    if (broadcast_sock == INVALID_SOCKET)
+    {
+        broadcast_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (broadcast_sock == INVALID_SOCKET)
+        {
+            fs_log_output("[Trifecta-Interface] Error: Could not create UDP socket! Code: %d\n",
+                          WSAGetLastError());
+            return -1;
+        }
+
+        BOOL reuse = TRUE;
+        if (setsockopt(broadcast_sock, SOL_SOCKET, SO_REUSEADDR,
+                       (const char *)&reuse, sizeof(reuse)) == SOCKET_ERROR)
+        {
+            fs_log_output("[Trifecta-Interface] Error: setsockopt SO_REUSEADDR failed! Code: %d\n",
+                          WSAGetLastError());
+            closesocket(broadcast_sock);
+            broadcast_sock = INVALID_SOCKET;
+            return -2;
+        }
+
+        // Some Windows NICs require SO_BROADCAST even for receiving
+        BOOL broadcast = TRUE;
+        setsockopt(broadcast_sock, SOL_SOCKET, SO_BROADCAST,
+                   (const char *)&broadcast, sizeof(broadcast));
+
+        struct sockaddr_in local_addr;
+        memset(&local_addr, 0, sizeof(local_addr));
+        local_addr.sin_family = AF_INET;
+        local_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        local_addr.sin_port = htons(FS_TRIFECTA_DEVICE_IDENTIFY_PORT);
+
+        if (bind(broadcast_sock, (struct sockaddr *)&local_addr, sizeof(local_addr)) == SOCKET_ERROR)
+        {
+            fs_log_output("[Trifecta-Interface] Error: Could not bind broadcast socket! Code: %d\n",
+                          WSAGetLastError());
+            closesocket(broadcast_sock);
+            broadcast_sock = INVALID_SOCKET;
+            return -3;
+        }
+
+        // Put socket into NON-BLOCKING mode (Windows equivalent of MSG_DONTWAIT)
+        u_long nonblock = 1;
+        if (ioctlsocket(broadcast_sock, FIONBIO, &nonblock) != 0)
+        {
+            fs_log_output("[Trifecta-Interface] Error: ioctlsocket(FIONBIO) failed! Code: %d\n",
+                          WSAGetLastError());
+            closesocket(broadcast_sock);
+            broadcast_sock = INVALID_SOCKET;
+            return -5;
+        }
+    }
+
+    // Prepare poll structure
+    WSAPOLLFD pfd = {0};
+    pfd.fd = broadcast_sock;
+    pfd.events = POLLIN;
+
+    int timeout_ms = timeout_micros / 1000;
+    int discovered = 0;
+
+    uint8_t buffer[512];
+
+    // Poll ONCE per external call
+    int ret = WSAPoll(&pfd, 1, timeout_ms);
+    if (ret < 0)
+    {
+        fs_log_output("[Trifecta-Interface] Error: WSAPoll failed! Code: %d\n", WSAGetLastError());
+        return -4;
+    }
+
+    if (ret == 0)
+    {
+        // Timeout reached, no packets
+        return 0;
+    }
+
+    // Drain ALL packets currently buffered
+    while (1)
+    {
+        struct sockaddr_in src_addr;
+        int src_len = sizeof(src_addr);
+        memset(&src_addr, 0, sizeof(src_addr));
+
+        int n = recvfrom(broadcast_sock, (char *)buffer, sizeof(buffer), 0,
+                         (struct sockaddr *)&src_addr, &src_len);
+
+        if (n < 0)
+        {
+            int err = WSAGetLastError();
+            if (err == WSAEWOULDBLOCK)
+                break; // No more packets buffered
+
+            return -20 + n; // Real error
+        }
+
+        // Extract sender IP
+        char sender_ip[64];
+        if (!inet_ntop(AF_INET, &src_addr.sin_addr, sender_ip, sizeof(sender_ip)))
+            continue;
+
+        // Avoid duplicates
+        bool exists = false;
+        for (int i = 0; i < discovered; i++)
+        {
+            if (strcmp(ip_addr_list[i], sender_ip) == 0)
+            {
+                exists = true;
+                break;
+            }
+        }
+
+        if (!exists && discovered < FS_MAX_NUMBER_DEVICES)
+        {
+            snprintf(ip_addr_list[discovered], 64, "%s", sender_ip);
+            discovered++;
+        }
+    }
+
+    return discovered;
+}
 
 /// @brief Start the network TCP driver.
 /// @param device_handle Pointer to the device information structure
@@ -195,10 +330,10 @@ ssize_t fs_transmit_networked_tcp(fs_device_info_t *device_handle,
     int r = WSAPoll(&pfd, 1, timeout_ms);
 
     if (r <= 0)
-        return -1;  // timeout or error
+        return -1; // timeout or error
 
     if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))
-        return -1;  // connection died
+        return -1; // connection died
 
     int written = send(device_handle->device_params.tcp_sock,
                        (const char *)tx_buffer,
@@ -274,10 +409,10 @@ ssize_t fs_receive_networked_tcp(fs_device_info_t *device_handle,
     int r = WSAPoll(&pfd, 1, timeout_ms);
 
     if (r <= 0)
-        return -1;  // timeout or error
+        return -1; // timeout or error
 
     if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))
-        return -1;  // connection closed/reset
+        return -1; // connection closed/reset
 
     int recv_len = recv(device_handle->device_params.tcp_sock,
                         (char *)rx_buffer,
@@ -286,7 +421,6 @@ ssize_t fs_receive_networked_tcp(fs_device_info_t *device_handle,
 
     return (recv_len == SOCKET_ERROR) ? -1 : recv_len;
 }
-
 
 /// @brief Receive data over a networked UDP connection
 /// @param device_handle Pointer to the device information structure
@@ -327,7 +461,6 @@ ssize_t fs_receive_networked_udp(fs_device_info_t *device_handle,
 
     return (recv_len == SOCKET_ERROR) ? -1 : recv_len;
 }
-
 
 /// @brief Shutdown the network TCP driver.
 /// @param device_handle Pointer to the device information structure.

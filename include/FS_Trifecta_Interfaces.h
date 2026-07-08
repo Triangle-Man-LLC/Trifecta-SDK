@@ -74,6 +74,14 @@ extern "C"
     /// @return 0 on success, or a negative error code on failure.
     int fs_thread_exit(void *thread_handle);
 
+    /// @brief Listens for UDP broadcasts from devices on the network and retrieves their IP addresses.
+    /// This is useful for device discovery when the IP address is not known beforehand.
+    /// @param ip_addr_list 
+    /// @param num_devices 
+    /// @param timeout_micros 
+    /// @return Number of devices discovered on success, or a negative error code on failure.
+    ssize_t fs_listen_for_udp_broadcasts(char ip_addr_list[FS_MAX_NUMBER_DEVICES][64], int timeout_micros);
+    
     /// @brief Sends data via TCP to the specified device.
     /// @param device_handle Pointer to the device information structure.
     /// @param tx_buffer Pointer to the data buffer to transmit.

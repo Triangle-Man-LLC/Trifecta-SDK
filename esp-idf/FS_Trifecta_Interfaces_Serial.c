@@ -28,31 +28,32 @@
 #include "FS_Trifecta_Interfaces.h"
 
 #if (CONFIG_USB_ENABLED)
+
 #include "usb/usb_host.h"
 #include "usb/cdc_acm_host.h"
 
 #define MAX_TRIFECTA_CDC_DEVICES 4
 
-typedef struct
-{
-    int id;
-    cdc_acm_dev_hdl_t handle;
-    bool active;
-} fs_cdc_handle_entry_t;
+// typedef struct
+// {
+//     int id;
+//     cdc_acm_dev_hdl_t handle;
+//     bool active;
+// } fs_cdc_handle_entry_t;
 
-cdc_handle_entry_t cdc_table[MAX_TRIFECTA_CDC_DEVICES];
+// static fs_cdc_handle_entry_t cdc_table[MAX_TRIFECTA_CDC_DEVICES] = {};
 
-cdc_acm_dev_hdl_t get_handle_from_id(int id)
-{
-    for (int i = 0; i < MAX_TRIFECTA_CDC_DEVICES; ++i)
-    {
-        if (cdc_table[i].id == id && cdc_table[i].active)
-        {
-            return cdc_table[i].handle;
-        }
-    }
-    return NULL;
-}
+// static cdc_acm_dev_hdl_t get_handle_from_id(int id)
+// {
+//     for (int i = 0; i < MAX_TRIFECTA_CDC_DEVICES; ++i)
+//     {
+//         if (cdc_table[i].id == id && cdc_table[i].active)
+//         {
+//             return cdc_table[i].handle;
+//         }
+//     }
+//     return NULL;
+// }
 
 #endif
 

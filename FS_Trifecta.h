@@ -21,7 +21,7 @@ extern "C"
 {
 #endif
 
-    /// @section Device handle allocation/deallocation
+    /// @section Device allocation/deallocation/enumeration
 
     /// @brief Allocate a new device handle for use externally.
     /// This should only be used for purposes of external bindings (e.g. C# or Python)
@@ -35,6 +35,29 @@ extern "C"
     /// @param device The DYNAMICALLY ALLOCATED device handle
     /// @return None
     FS_API void fs_export_free_device(fs_device_info_t *device);
+
+    /// @brief Retrieves a list of IP address of available devices on the network.
+    /// Every time this is called, it will add any newly discovered devices to the list until the max number of devices is reached.
+    /// This is done by listening for UDP broadcasts from devices on the network, so it does not require knowing the IP address beforehand.
+    /// The function will block for the indicated timeout. It is strongly recommended to ensure only one thread is calling this function at a time,
+    /// as they will all receive the same UDP broadcasts and cause race conditions in the device list.
+    /// @param ip_addr_list A pre-allocated list of strings to store the discovered IP addresses.
+    /// The list should have a size of at least FS_MAX_NUMBER_DEVICES.
+    /// @param timeout_micros The amount of time to listen for UDP broadcasts (microseconds)
+    /// @return The number of devices discovered.
+    FS_API ssize_t fs_obtain_network_devices_list(char ip_addr_list[FS_MAX_NUMBER_DEVICES][FS_MAX_IP_ADDRESS_LENGTH], int timeout_micros);
+
+    /// @brief Retrieves a list of available serial devices on the system.
+    /// On embedded platforms, this will depend on the platform capabilities and may not be supported.
+    /// On Linux, this will scan for devices with paths matching "/dev/ttyACM*" and "/dev/ttyUSB*".
+    /// On Windows, this will scan for devices with paths matching "COM*".
+    /// @param device_path_list A pre-allocated list of strings to store the discovered device paths.
+    /// The list should have a size of at least FS_MAX_NUMBER_DEVICES.
+    /// @param timeout_micros The amount of time to scan for serial devices (microseconds).
+    /// Note that on some platforms, the scanning can be slow,
+    /// so it is recommended to set a longer timeout (e.g. 1 second = 1000000 microseconds).
+    /// @return The number of serial devices discovered.
+    FS_API ssize_t fs_obtain_serial_devices_list(char device_path_list[FS_MAX_NUMBER_DEVICES][FS_MAX_DEVICE_PATH_LENGTH], int timeout_micros);
 
     /// @section Device initialization functions
 
@@ -265,17 +288,17 @@ extern "C"
     FS_API int fs_set_serial_uart_baudrate(fs_device_info_t *device_handle, int baudrate);
 
     /// @brief Set the GNSS baseline. Only applicable for GNSS-enabled devices, such as Trifecta-M series.
-    /// @param device_handle 
+    /// @param device_handle
     /// @param baseline <x,y,z> baseline between GNSS_1 and GNSS_0 antennas. Unit in neters [m].
     /// @return 0 on success.
     FS_API int fs_set_gnss_baseline(fs_device_info_t *device_handle, fs_vector3_t baseline);
 
     /// @brief Set the GNSS lever arm. Only applicable for GNSS-enabled devices, such as Trifecta-M series.
-    /// @param device_handle 
+    /// @param device_handle
     /// @param baseline <x,y,z> lever arm between GNSS_0 antenna and the IMU mounting point. Unit in neters [m].
     /// @return 0 on success.
     FS_API int fs_set_gnss_lever_arm(fs_device_info_t *device_handle, fs_vector3_t lever_arm);
-    
+
     /// @brief Manually set the AHRS yaw angle to a known value. Non-volatile.
     /// NOTE: However, this procedure is usually performed automatically when connected with a compatible GNSS.
     /// @param device_handle Device handle
@@ -290,7 +313,7 @@ extern "C"
     /// @return 0 on success.
     FS_API int fs_set_ins_position(fs_device_info_t *device_handle, fs_vector3_d_t *position);
 
-    /// @section 
+    /// @section
 
     /// @brief
     /// @param device_handle
@@ -312,8 +335,7 @@ extern "C"
     /// @return
     FS_API int fs_eulers_from_quaternion(fs_vector3_t *euler_angles, const fs_quaternion_t *quaternion);
 
-
-    /// @section Replaying 
+    /// @section Replaying
 
     /// @brief Attempts to open the replay file at given path.
     /// @param r Replay handle (This is managed by the backend, so treat it as opaque.)
@@ -339,7 +361,6 @@ extern "C"
     /// @param r Replay handle (This is managed by the backend, so treat it as opaque.)
     /// @return None.
     FS_API void fs_replay_close(fs_replay_t *r);
-
 
     /// @section Debug utilities - This should typically not be used at all.
 

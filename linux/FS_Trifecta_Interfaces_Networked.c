@@ -30,6 +30,7 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/select.h>
+#include <sys/poll.h>
 #include <sys/ioctl.h>
 
 #include <fcntl.h>
@@ -37,6 +38,132 @@
 #include <glob.h>
 
 #include "FS_Trifecta_Interfaces.h"
+
+/// @brief Listens for UDP broadcasts from devices on the network and retrieves their IP addresses.
+/// This is useful for device discovery when the IP address is not known beforehand.
+/// @param ip_addr_list
+/// @param timeout_micros
+/// @return Number of devices discovered on success, or a negative error code on failure.
+ssize_t fs_listen_for_udp_broadcasts(char ip_addr_list[FS_MAX_NUMBER_DEVICES][64],
+                                     int timeout_micros)
+{
+    static int broadcast_sock = -1;
+
+    if (!ip_addr_list)
+        return -1;
+
+    // Create and bind the broadcast socket once
+    if (broadcast_sock < 0)
+    {
+        broadcast_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (broadcast_sock < 0)
+        {
+            fs_log_output("[Trifecta-Interface] Error: Could not create UDP socket! Errno: %d\n",
+                          errno);
+            return -1;
+        }
+
+        int reuse = 1;
+        if (setsockopt(broadcast_sock, SOL_SOCKET, SO_REUSEADDR,
+                       &reuse, sizeof(reuse)) < 0)
+        {
+            fs_log_output("[Trifecta-Interface] Error: setsockopt SO_REUSEADDR failed! Errno: %d\n",
+                          errno);
+            close(broadcast_sock);
+            broadcast_sock = -1;
+            return -2;
+        }
+
+        // LWIP requires SO_BROADCAST to receive broadcast packets
+        int broadcast = 1;
+        setsockopt(broadcast_sock, SOL_SOCKET, SO_BROADCAST,
+                   &broadcast, sizeof(broadcast));
+
+        struct sockaddr_in local_addr;
+        memset(&local_addr, 0, sizeof(local_addr));
+        local_addr.sin_family = AF_INET;
+        local_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        local_addr.sin_port = htons(FS_TRIFECTA_DEVICE_IDENTIFY_PORT);
+
+        if (bind(broadcast_sock, (struct sockaddr *)&local_addr, sizeof(local_addr)) < 0)
+        {
+            fs_log_output("[Trifecta-Interface] Error: Could not bind broadcast socket! Errno: %d\n",
+                          errno);
+            close(broadcast_sock);
+            broadcast_sock = -1;
+            return -3;
+        }
+    }
+
+    // Prepare poll structure
+    struct pollfd pfd = {
+        .fd = broadcast_sock,
+        .events = POLLIN
+    };
+
+    int timeout_ms = timeout_micros / 1000;
+    int discovered = 0;
+
+    uint8_t buffer[512];
+
+    // Poll ONCE per external call
+    int ret = poll(&pfd, 1, timeout_ms);
+    if (ret < 0)
+    {
+        fs_log_output("[Trifecta-Interface] Error: poll() failed! Errno: %d\n", errno);
+        return -4;
+    }
+
+    if (ret == 0)
+    {
+        // Timeout reached, no packets
+        return 0;
+    }
+
+    // Drain ALL packets currently buffered
+    while (1)
+    {
+        struct sockaddr_in src_addr;
+        socklen_t src_len = sizeof(src_addr);
+        memset(&src_addr, 0, sizeof(src_addr));
+
+        ssize_t n = recvfrom(broadcast_sock, buffer, sizeof(buffer),
+                             MSG_DONTWAIT,
+                             (struct sockaddr *)&src_addr, &src_len);
+
+        if (n < 0)
+        {
+            if (errno == EWOULDBLOCK || errno == EAGAIN)
+                break; // No more packets buffered
+
+            return -20 + n; // Real error
+        }
+
+        // Extract sender IP
+        char sender_ip[64];
+        if (!inet_ntop(AF_INET, &src_addr.sin_addr, sender_ip, sizeof(sender_ip)))
+            continue;
+
+        // Avoid duplicates
+        bool exists = false;
+        for (int i = 0; i < discovered; i++)
+        {
+            if (strcmp(ip_addr_list[i], sender_ip) == 0)
+            {
+                exists = true;
+                break;
+            }
+        }
+
+        if (!exists && discovered < FS_MAX_NUMBER_DEVICES)
+        {
+            snprintf(ip_addr_list[discovered], 64, "%s", sender_ip);
+            discovered++;
+        }
+    }
+
+    return discovered;
+}
 
 /// @brief Start the network TCP driver.
 /// @param device_handle Pointer to the device information structure
