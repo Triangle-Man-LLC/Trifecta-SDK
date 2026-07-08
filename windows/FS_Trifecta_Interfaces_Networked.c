@@ -36,6 +36,7 @@
 
 // Platform-specific: Functions for initializing communication drivers on target platform
 #pragma comment(lib, "ws2_32.lib")
+
 /// @brief Listens for UDP broadcasts from devices on the network and retrieves their IP addresses.
 /// This is useful for device discovery when the IP address is not known beforehand.
 /// @param ip_addr_list
@@ -90,6 +91,17 @@ ssize_t fs_listen_for_udp_broadcasts(char ip_addr_list[FS_MAX_NUMBER_DEVICES][64
             broadcast_sock = INVALID_SOCKET;
             return -3;
         }
+
+        // Put socket into NON-BLOCKING mode (Windows equivalent of MSG_DONTWAIT)
+        u_long nonblock = 1;
+        if (ioctlsocket(broadcast_sock, FIONBIO, &nonblock) != 0)
+        {
+            fs_log_output("[Trifecta-Interface] Error: ioctlsocket(FIONBIO) failed! Code: %d\n",
+                          WSAGetLastError());
+            closesocket(broadcast_sock);
+            broadcast_sock = INVALID_SOCKET;
+            return -5;
+        }
     }
 
     // Prepare poll structure
@@ -123,8 +135,7 @@ ssize_t fs_listen_for_udp_broadcasts(char ip_addr_list[FS_MAX_NUMBER_DEVICES][64
         int src_len = sizeof(src_addr);
         memset(&src_addr, 0, sizeof(src_addr));
 
-        int n = recvfrom(broadcast_sock, (char *)buffer, sizeof(buffer),
-                         MSG_DONTWAIT,
+        int n = recvfrom(broadcast_sock, (char *)buffer, sizeof(buffer), 0,
                          (struct sockaddr *)&src_addr, &src_len);
 
         if (n < 0)
