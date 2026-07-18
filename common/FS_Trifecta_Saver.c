@@ -285,25 +285,38 @@ static fs_thread_func_t save_thread_func(void *arg)
     if (!d || !d->file)
         return FS_THREAD_RETVAL;
 
-    fprintf(stderr, "THREAD START: d=%p file=%p running=%d\n",
-            (void *)d, (void *)d->file, d->running);
+    fs_log_critical("THREAD START: d=%p file=%p running=%d\n",
+                    (void *)d, (void *)d->file, d->running);
 
     fs_packet_union_t packet = {0};
     char linebuf[LINEBUF_SIZE] = {0};
     int flush_counter = 0;
-    while (d->running == FS_RUN_STATUS_RUNNING && d->file)
+    while (d->running == FS_RUN_STATUS_RUNNING)
     {
         while (FS_RINGBUFFER_POP(&d->packets_to_save, FS_MAX_PACKET_QUEUE_LENGTH, &packet))
         {
             if (format_packet(linebuf, sizeof(linebuf), &packet) > 0)
             {
                 if (d->file)
+                {
+
                     fprintf(d->file, "%s", linebuf);
+                }
+                else
+                {
+                    break;
+                }
 
                 if (++flush_counter >= 200)
                 {
                     if (d->file)
+                    {
                         fflush(d->file);
+                    }
+                    else
+                    {
+                        break;
+                    }
                     flush_counter = 0;
                 }
             }
@@ -348,7 +361,7 @@ int fs_save_begin_device(fs_save_device_t *saver, fs_device_info_t *dev)
     else
     {
         snprintf(filename, sizeof(filename),
-                 "%s%s.csv",
+                 "%s_%s.csv",
                  saver->config.filename_prefix ? saver->config.filename_prefix : "",
                  dev->device_descriptor.device_name);
     }

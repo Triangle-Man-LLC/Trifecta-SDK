@@ -23,10 +23,10 @@ extern "C"
     typedef struct fs_save_config_t
     {
         /// Directory where CSV files will be written (must exist or be creatable)
-        const char *output_directory;
+        const char output_directory[256];
 
         /// Optional filename prefix (e.g. "Trifecta_"); may be NULL
-        const char *filename_prefix;
+        const char filename_prefix[128];
 
         /// If non-zero, include timestamp (yyyyMMddHHmmss) in filename
         int include_timestamp_in_filename;
