@@ -53,32 +53,6 @@ extern "C"
         int device_count;
     } fs_save_t;
 
-
-    /// @brief Create and initialize a saver context with the given configuration.
-    /// @param saver Pointer to saver context to initialize (must not be NULL)
-    /// @param cfg Configuration for the saver (if NULL, defaults will be used)
-    /// @return 0 on success, non-zero on error
-    int fs_save_init(fs_save_t *saver, const fs_save_config_t *cfg);
-
-    /// @brief Destroy saver context and close all open files
-    void fs_save_destroy(fs_save_t *saver);
-
-    /// @brief Begin saving for a specific device.
-    /// Uses fs_device_info_t to derive filename, metadata, etc.
-    /// Returns 0 on success, non-zero on error.
-    int fs_save_begin_device(fs_save_t *saver, const fs_device_info_t *dev);
-
-    /// @brief Stop saving for a specific device and close its file.
-    /// Safe to call multiple times; returns 0 on success.
-    int fs_save_end_device(fs_save_t *saver, const fs_device_info_t *dev);
-
-    /// @brief Write a single packet for a given device to its CSV file.
-    /// This is the function the driver calls from its packet callback.
-    /// Returns 0 on success, non-zero on error.
-    int fs_save_on_packet(fs_save_t *saver,
-                          const fs_device_info_t *dev,
-                          const fs_packet_union_t *packet);
-
 #ifdef __cplusplus
 }
 #endif

@@ -9,7 +9,7 @@
 /// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 /// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "FS_Trifecta_Saver.h"
+#include "FS_Trifecta.h"
 
 #define LINEBUF_SIZE 1024
 
@@ -29,6 +29,18 @@ static void write_header(FILE *f)
         "Temp_0,Temp_1,Temp_2,"
         "DeviceMotionStatus\n",
         f);
+}
+
+fs_save_t *fs_export_allocate_save()
+{
+    return (fs_save_t *)calloc(1, sizeof(fs_save_t));
+}
+
+void fs_export_free_save(fs_save_t *save)
+{
+    if (save)
+        free(save);
+    save = NULL;
 }
 
 int fs_save_init(fs_save_t *saver, const fs_save_config_t *cfg)
@@ -272,9 +284,9 @@ static fs_thread_func_t save_thread_func(void *arg)
     fs_save_device_t *d = (fs_save_device_t *)arg;
     if (!d || !d->file)
         return FS_THREAD_RETVAL;
-        
+
     fprintf(stderr, "THREAD START: d=%p file=%p running=%d\n",
-            (void*)d, (void*)d->file, d->running);
+            (void *)d, (void *)d->file, d->running);
 
     // Enable large buffered writes
     // setvbuf(d->file, NULL, _IOFBF, 64 * 1024);
