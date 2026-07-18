@@ -48,16 +48,29 @@ int fs_save_init(fs_save_device_t *saver, const fs_save_config_t *config)
     if (!saver)
         return -1;
 
-    fs_save_destroy(saver);
-
-    if (config)
-        saver->config = *config;
-    else
+    // Stop any existing thread and close file cleanly
+    if (saver->running == FS_RUN_STATUS_RUNNING)
     {
-        memset(&saver->config, 0, sizeof(saver->config));
-        saver->config.write_header = 1;
-        saver->config.include_timestamp_in_filename = 1;
+        saver->running = FS_RUN_STATUS_IDLE;
     }
+
+    if (saver->file)
+    {
+        fflush(saver->file);
+        fclose(saver->file);
+        saver->file = NULL;
+    }
+
+    // Set config
+    if (config)
+        memcpy(&saver->config, config, sizeof(fs_save_config_t));
+    else
+        memset(&saver->config, 0, sizeof(fs_save_config_t));
+
+    // Reset ringbuffer and flags
+    FS_RINGBUFFER_INIT(&saver->packets_to_save);
+    saver->running = FS_RUN_STATUS_IDLE;
+    saver->thread_handle.handle = 0;
 
     return 0;
 }
@@ -275,26 +288,22 @@ static fs_thread_func_t save_thread_func(void *arg)
     fprintf(stderr, "THREAD START: d=%p file=%p running=%d\n",
             (void *)d, (void *)d->file, d->running);
 
-    // Enable large buffered writes
-    // setvbuf(d->file, NULL, _IOFBF, 64 * 1024);
-
-    // write_header(d->file);
-
     fs_packet_union_t packet = {0};
-    char linebuf[1024] = {0};
+    char linebuf[LINEBUF_SIZE] = {0};
     int flush_counter = 0;
-
-    while (d->running == FS_RUN_STATUS_RUNNING)
+    while (d->running == FS_RUN_STATUS_RUNNING && d->file)
     {
         while (FS_RINGBUFFER_POP(&d->packets_to_save, FS_MAX_PACKET_QUEUE_LENGTH, &packet))
         {
             if (format_packet(linebuf, sizeof(linebuf), &packet) > 0)
             {
-                fprintf(d->file, "%s", linebuf);
+                if (d->file)
+                    fprintf(d->file, "%s", linebuf);
 
                 if (++flush_counter >= 200)
                 {
-                    fflush(d->file);
+                    if (d->file)
+                        fflush(d->file);
                     flush_counter = 0;
                 }
             }
@@ -302,32 +311,36 @@ static fs_thread_func_t save_thread_func(void *arg)
 
         fs_delay(1);
     }
-    fflush(d->file);
-    fclose(d->file);
-    d->file = NULL;
     return FS_THREAD_RETVAL;
 }
+
 int fs_save_begin_device(fs_save_device_t *saver, fs_device_info_t *dev)
 {
     if (!saver || !dev)
+    {
+        fs_log_critical("[FS-Trifecta-Saver] fs_save_begin_device(): Saver/device invalid! %p, %p",
+                        saver, dev);
         return -1;
+    }
 
-    // If already saving for this device, do nothing
-    if (dev->save_context && ((fs_save_device_t *)(dev->save_context))->file)
+    if (dev->save_context && ((fs_save_device_t *)dev->save_context)->file)
+    {
+        fs_log_critical("[FS-Trifecta-Saver] Device %s already saving!",
+                        dev->device_descriptor.device_name);
         return 0;
+    }
 
     char filename[256] = {0};
     char fullpath[512] = {0};
 
-    // Build filename
     if (saver->config.include_timestamp_in_filename)
     {
         fs_tm_t tmv;
         fs_get_local_time(&tmv);
 
         snprintf(filename, sizeof(filename),
-                 "%s%s_%04d%02d%02d%02d%02d%02d.csv",
-                 saver->config.filename_prefix ? saver->config.filename_prefix : "",
+                 "%s_%s_%04d%02d%02d%02d%02d%02d.csv",
+                 (saver->config.filename_prefix ? saver->config.filename_prefix : ""),
                  dev->device_descriptor.device_name,
                  tmv.year, tmv.month, tmv.day,
                  tmv.hour, tmv.min, tmv.sec);
@@ -344,17 +357,44 @@ int fs_save_begin_device(fs_save_device_t *saver, fs_device_info_t *dev)
              saver->config.output_directory ? saver->config.output_directory : ".",
              filename);
 
-    // Open file
     saver->file = fopen(fullpath, "w");
     if (!saver->file)
+    {
+        fs_log_critical("[FS-Trifecta-Saver] File creation failed for device: %s (full path: %s)",
+                        dev->device_descriptor.device_name, fullpath);
         return -3;
+    }
 
-    // Write header if requested
-    if (saver->config.write_header)
-        write_header(saver->file);
+    write_header(saver->file);
+    fflush(saver->file);
 
-    // Attach saver to device so packet callback can use it
     dev->save_context = saver;
+
+    FS_RINGBUFFER_INIT(&saver->packets_to_save);
+
+    saver->running = FS_RUN_STATUS_RUNNING;
+
+    size_t stack_size = dev->driver_config.task_stack_size_bytes;
+
+    int ok = fs_thread_start(
+        save_thread_func,
+        saver,
+        &saver->running,
+        &saver->thread_handle,
+        stack_size,
+        -1,
+        -1);
+
+    if (ok != 0)
+    {
+        fclose(saver->file);
+        saver->file = NULL;
+        dev->save_context = NULL;
+        fs_log_critical("[FS-Trifecta-Saver] Start save thread failed for device: %s",
+                        dev->device_descriptor.device_name);
+        saver->running = FS_RUN_STATUS_IDLE;
+        return -4;
+    }
 
     return 0;
 }
@@ -364,20 +404,15 @@ int fs_save_end_device(fs_save_device_t *saver, fs_device_info_t *dev)
     if (!saver || !dev)
         return -1;
 
-    // Detach saver from device
+    saver->running = FS_RUN_STATUS_IDLE;
     dev->save_context = NULL;
 
     if (saver->file)
     {
         fflush(saver->file);
-
-        // int fd = fileno(saver->file);
-        // fsync(fd);
-
         fclose(saver->file);
         saver->file = NULL;
     }
-
     return 0;
 }
 
@@ -388,17 +423,12 @@ int fs_save_on_packet(fs_save_device_t *saver,
     if (!saver || !dev || !packet)
         return -1;
 
-    if (!saver->file)
+    if (saver->running != FS_RUN_STATUS_RUNNING)
         return -2;
 
-    char linebuf[1024];
-
-    int n = format_packet(linebuf, sizeof(linebuf), packet);
-    if (n <= 0)
-        return -3;
-
-    if (fputs(linebuf, saver->file) < 0)
-        return -4;
+    FS_RINGBUFFER_PUSH_FORCE(&saver->packets_to_save,
+                             FS_MAX_PACKET_QUEUE_LENGTH,
+                             packet);
 
     return 0;
 }
