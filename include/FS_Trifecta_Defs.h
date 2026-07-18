@@ -129,6 +129,8 @@ extern "C"
         fs_bytes_ringbuffer_t data_buffer;       // Do not modify this, it is managed in backend.
         fs_packet_ringbuffer_t packet_buf_queue; // Packet queue buffer for the device (read-only)
         fs_command_ringbuffer_t command_queue;   // Command buffer for the device (read-only)
+
+        void *save_context; // If saving data to file, this is used internally for holding save context
     } fs_device_info_t;
 
     static inline size_t fs_safe_strnlen(const char *s, size_t maxlen)

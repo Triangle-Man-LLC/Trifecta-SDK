@@ -36,6 +36,14 @@
 #include <BaseTsd.h> // MSVC Windows SDK version
 #endif
 
+// // FSYNC compatibility
+// #if defined(_WIN32)
+//     #include <io.h>        // for _commit()
+//     #define fsync _commit  // map fsync → _commit
+// #else
+//     #include <unistd.h>    // for fsync()
+// #endif
+
 // --- ssize_t on Windows ---
 typedef SSIZE_T ssize_t;
 
