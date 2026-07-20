@@ -7,6 +7,8 @@ set(trifecta_component_srcs "esp-idf/FS_Trifecta_Interfaces.c"
                             "common/FS_Trifecta_Device.c" 
                             "common/FS_Trifecta_Device_Utils.c"
                             "common/FS_Trifecta_Serial.c" 
+                            "common/FS_Trifecta_Saver.c" 
+                            "common/FS_Trifecta_Replay.c" 
                             "common/FS_Trifecta_Networked.c")
 set(trifecta_required_components driver esp_timer)
 

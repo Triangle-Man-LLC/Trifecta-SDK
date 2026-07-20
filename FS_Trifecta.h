@@ -337,12 +337,31 @@ extern "C"
 
     /// @section Replaying
 
+    /// @brief Allocate a new device handle for use externally.
+    /// This should only be used for purposes of external bindings (e.g. C# or Python)
+    /// For native C/C++ uses, it is much more preferable to statically allocate.
+    /// @return A default-initialized device handle.
+    FS_API fs_replay_t *fs_export_allocate_replay();
+
+    /// @brief Deallocate the exported device handle.
+    /// This should only be used for purposes of external bindings (e.g. C# or Python)
+    /// For native C/C++ uses, it is much more preferable to statically allocate.
+    /// This should only be called AFTER fs_replay_close().
+    /// @param device The DYNAMICALLY ALLOCATED device handle
+    /// @return None
+    FS_API void fs_export_free_replay(fs_replay_t *replay);
+
     /// @brief Attempts to open the replay file at given path.
     /// @param r Replay handle (This is managed by the backend, so treat it as opaque.)
     /// @param path The path to the file to load, should be a CSV exported by this library.
     /// @param sparse_step This value is typically set to FS_REPLAY_DEFAULT_STEP.
     /// @return 0 on success.
     FS_API int fs_replay_open(fs_replay_t *r, const char *path, uint32_t sparse_step);
+
+    /// @brief Gets the size of the replay file. Must already have been loaded by fs_replay_open().
+    /// @param r r Replay handle (This is managed by the backend, so treat it as opaque.)
+    /// @return The number of elements in the replay.
+    FS_API size_t fs_replay_get_size(const fs_replay_t *r);
 
     /// @brief Advance to the next timestep in the saved data.
     /// @param r Replay handle (This is managed by the backend, so treat it as opaque.)
@@ -361,6 +380,39 @@ extern "C"
     /// @param r Replay handle (This is managed by the backend, so treat it as opaque.)
     /// @return None.
     FS_API void fs_replay_close(fs_replay_t *r);
+
+    /// @section Saving
+
+    /// @brief Allocate a new save handle for use externally.
+    /// This should only be used for purposes of external bindings (e.g. C# or Python)
+    /// For native C/C++ uses, it is much more preferable to statically allocate.
+    /// @return A default-initialized save handle.
+    FS_API fs_save_device_t *fs_export_allocate_save();
+
+    /// @brief Deallocate the exported save handle.
+    /// This should only be used for purposes of external bindings (e.g. C# or Python)
+    /// For native C/C++ uses, it is much more preferable to statically allocate.
+    /// @param device The DYNAMICALLY ALLOCATED save handle
+    /// @return None
+    FS_API void fs_export_free_save(fs_save_device_t *device);
+
+    /// @brief Create and initialize a saver context with the given configuration.
+    /// @param saver Pointer to saver context to initialize (must not be NULL)
+    /// @param cfg Configuration for the saver (if NULL, defaults will be used)
+    /// @return 0 on success, non-zero on error
+    FS_API int fs_save_init(fs_save_device_t *device, const fs_save_config_t *cfg);
+
+    /// @brief Destroy saver context and close all open files
+    FS_API void fs_save_destroy(fs_save_device_t *device);
+
+    /// @brief Begin saving for a specific device.
+    /// Uses fs_device_info_t to derive filename, metadata, etc.
+    /// Returns 0 on success, non-zero on error.
+    FS_API int fs_save_begin_device(fs_save_device_t *device, fs_device_info_t *dev);
+
+    /// @brief Stop saving for a specific device and close its file.
+    /// Safe to call multiple times; returns 0 on success.
+    FS_API int fs_save_end_device(fs_save_device_t *device, fs_device_info_t *dev);
 
     /// @section Debug utilities - This should typically not be used at all.
 

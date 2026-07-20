@@ -9,7 +9,7 @@
 /// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 /// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "FS_Trifecta_Replay.h"
+#include "FS_Trifecta.h"
 
 static char linebuf[512] = {0};
 
@@ -905,6 +905,20 @@ int fs_replay_parse_packet(fs_replay_t *r,
     return 0;
 }
 
+fs_replay_t *fs_export_allocate_replay()
+{
+    return (fs_replay_t *)calloc(1, sizeof(fs_replay_t));
+}
+
+void fs_export_free_replay(fs_replay_t *replay)
+{
+    if (replay)
+    {
+        fs_replay_close(replay);
+        free(replay);
+    }
+}
+
 int fs_replay_open(fs_replay_t *r, const char *path, uint32_t sparse_step)
 {
     if (!r || !path || sparse_step == 0)
@@ -961,6 +975,13 @@ int fs_replay_open(fs_replay_t *r, const char *path, uint32_t sparse_step)
         fseek(r->fp, (long)r->offsets[0], SEEK_SET);
 
     return 0;
+}
+
+size_t fs_replay_get_size(const fs_replay_t *r)
+{
+    if (!r)
+        return 0;
+    return (size_t)r->num_lines;
 }
 
 int fs_replay_read_next(fs_replay_t *r, fs_packet_union_t *out)
@@ -1024,7 +1045,7 @@ int fs_replay_read_line(fs_replay_t *r,
         if (fs_safe_fgets(r->fp, linebuf, sizeof(linebuf)) <= 0)
             return -5;
     }
-    
+
     if (fs_safe_fgets(r->fp, linebuf, sizeof(linebuf)) <= 0)
         return -6;
 

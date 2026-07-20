@@ -11,6 +11,7 @@
 
 #include "FS_Trifecta_Defs.h"
 #include "FS_Trifecta_Device_Utils.h"
+#include "FS_Trifecta_Saver.h"
 
 // Base64 character set
 static const char base64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -342,8 +343,17 @@ int fs_enqueue_into_packet_queue(fs_device_info_t *device_handle, const fs_packe
         fs_log_output("[Trifecta-Device-Utils] Warning: Device packet queue was full! Packet dropped.");
         return -1;
     }
+
     // Update the last received packet...
     memcpy(&device_handle->last_received_packet, packet, sizeof(device_handle->last_received_packet));
+
+    if (device_handle->save_context) // If file saving is enabled, this passes the packet to the save context as well.
+    {
+        fs_save_on_packet(device_handle->save_context,
+                          device_handle,
+                          &device_handle->last_received_packet);
+    }
+
     return 0;
 }
 
