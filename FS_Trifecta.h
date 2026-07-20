@@ -358,6 +358,11 @@ extern "C"
     /// @return 0 on success.
     FS_API int fs_replay_open(fs_replay_t *r, const char *path, uint32_t sparse_step);
 
+    /// @brief Gets the size of the replay file. Must already have been loaded by fs_replay_open().
+    /// @param r r Replay handle (This is managed by the backend, so treat it as opaque.)
+    /// @return The number of elements in the replay.
+    FS_API size_t fs_replay_get_size(const fs_replay_t *r);
+
     /// @brief Advance to the next timestep in the saved data.
     /// @param r Replay handle (This is managed by the backend, so treat it as opaque.)
     /// @param out The fs_packet_union_t to copy the data into.

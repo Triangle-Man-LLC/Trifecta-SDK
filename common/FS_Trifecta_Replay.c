@@ -978,6 +978,13 @@ int fs_replay_open(fs_replay_t *r, const char *path, uint32_t sparse_step)
     return 0;
 }
 
+size_t fs_replay_get_size(const fs_replay_t *r)
+{
+    if (!r)
+        return 0;
+    return (size_t)r->num_lines;
+}
+
 int fs_replay_read_next(fs_replay_t *r, fs_packet_union_t *out)
 {
     if (!r || !r->fp || !out)
