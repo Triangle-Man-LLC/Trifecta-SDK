@@ -40,7 +40,6 @@ void fs_export_free_save(fs_save_device_t *save)
 {
     if (save)
         free(save);
-    save = NULL;
 }
 
 int fs_save_init(fs_save_device_t *saver, const fs_save_config_t *config)

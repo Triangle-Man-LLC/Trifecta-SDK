@@ -916,7 +916,6 @@ void fs_export_free_replay(fs_replay_t *replay)
     {
         fs_replay_close(replay);
         free(replay);
-        replay = NULL;
     }
 }
 
