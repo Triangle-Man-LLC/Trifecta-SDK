@@ -1,0 +1,5 @@
+# Sphinx is the only strict requirement.
+# sphinx-rtd-theme is preferred, but the build falls back to the
+# built-in "classic" theme when it is missing (see conf.py).
+sphinx
+sphinx-rtd-theme

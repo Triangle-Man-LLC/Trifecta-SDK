@@ -1,0 +1,39 @@
+name: Build documentation
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: trifecta-driver-docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-docs:
+    runs-on: [self-hosted, Linux, X64, Sphinx]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Build documentation
+        run: |
+          cd $GITHUB_WORKSPACE
+          sphinx-build -M html documentation documentation/_build 2>&1 | tee docs_build.log
+
+      - name: Check for warnings
+        run: |
+          if grep -E "WARNING|ERROR" docs_build.log; then
+            echo "::error::Sphinx produced warnings during the documentation build"
+            exit 1
+          fi
+          echo "No Sphinx warnings."
+
+      - name: Upload built documentation
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trifecta-sdk-docs
+          path: documentation/_build/html

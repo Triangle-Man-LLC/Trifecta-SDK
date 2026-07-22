@@ -8,3 +8,4 @@ dependencies.lock
 .devcontainer
 managed_components/
 *.meta
+documentation/_build/
