@@ -33,27 +33,20 @@
 
 #if defined(_MSC_VER)
 
-    #ifdef __cplusplus
-        // MSVC C++ mode: static_assert is available
-        #define FS_STATIC_ASSERT(cond, msg) static_assert((cond), msg)
-    #else
-        // MSVC C mode: typedef trick WITHOUT token pasting the message
-        #define FS_STATIC_ASSERT(cond, msg) \
-            typedef char static_assertion_failed[(cond) ? 1 : -1]
-    #endif
-
-#elif defined(__cplusplus)
-
-    // GCC/Clang C++
-    #define FS_STATIC_ASSERT(cond, msg) static_assert((cond), msg)
-
+#ifdef __cplusplus
+#define FS_STATIC_ASSERT(cond, msg) static_assert((cond), msg)
 #else
-
-    // GCC/Clang C11 C
-    #define FS_STATIC_ASSERT(cond, msg) _Static_assert((cond), msg)
-
+#define FS_STATIC_ASSERT(cond, msg) \
+    typedef char static_assertion_failed[(cond) ? 1 : -1]
 #endif
 
+#elif defined(__cplusplus)
+#define FS_STATIC_ASSERT(cond, msg) static_assert((cond), msg)
+
+#else
+#define FS_STATIC_ASSERT(cond, msg) _Static_assert((cond), msg)
+
+#endif
 
 #ifdef __cplusplus
 extern "C"
