@@ -10,7 +10,12 @@ set(trifecta_component_srcs "esp-idf/FS_Trifecta_Interfaces.c"
                             "common/FS_Trifecta_Saver.c" 
                             "common/FS_Trifecta_Replay.c" 
                             "common/FS_Trifecta_Networked.c")
-set(trifecta_required_components driver esp_timer)
+set(trifecta_required_components esp_timer 
+                                 esp_driver_gpio
+                                 esp_driver_uart
+                                 esp_driver_i2c
+                                 esp_driver_spi
+                                 esp_driver_twai)
 
 if(CONFIG_USB_ENABLED)
     list(APPEND trifecta_required_components usb)
