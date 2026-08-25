@@ -11,7 +11,7 @@ if [[ $# -ge 1 ]]; then
             BUILD_KIND="$1"
             ;;
         *)
-            echo "Usage: $0 [static|shared]"
+            echo "Usage: $0 [static|shared]" 
             exit 1
             ;;
     esac

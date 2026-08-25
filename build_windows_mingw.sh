@@ -12,3 +12,4 @@ cmake -B build_windows_mingw \
     -DBUILD_KIND="$BUILD_KIND"
 
 cmake --build build_windows_mingw -- -j"$(nproc)"
+ 

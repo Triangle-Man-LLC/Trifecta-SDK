@@ -10,7 +10,7 @@ echo "=== Trifecta Android Superbuild ==="
 detect_ndk() {
     # 1. Explicit environment variable
     if [[ -n "${ANDROID_NDK_HOME:-}" && -d "$ANDROID_NDK_HOME" ]]; then
-        echo "$ANDROID_NDK_HOME"
+        echo "$ANDROID_NDK_HOME" 
         return
     fi
 
