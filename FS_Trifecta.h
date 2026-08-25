@@ -144,6 +144,13 @@ extern "C"
     /// @return 0 on success.
     FS_API int fs_get_raw_packet_from_queue(fs_device_info_t *device_handle, fs_packet_union_t *packet_buffer, int pos);
 
+    /// @brief Pop the oldest packet from the queue.
+    /// This is useful for draining all updated packets, as opposed to the peeking function fs_get_raw_packet_from_queue().
+    /// @param device_handle Device handle
+    /// @param packet_buffer Pointer to the packet buffer.
+    /// @return 0 on success.
+    FS_API int fs_pop_raw_packet_from_queue(fs_device_info_t *device_handle, fs_packet_union_t *packet_buffer);
+
     /// @brief Retrieve the latest device orientation (quaternion).
     /// @param device_handle Device handle
     /// @param orientation_buffer Pointer to the orientation buffer.

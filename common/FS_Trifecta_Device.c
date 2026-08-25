@@ -389,6 +389,13 @@ int fs_get_raw_packet_from_queue(fs_device_info_t *device_handle, fs_packet_unio
     return 0;
 }
 
+int fs_pop_raw_packet_from_queue(fs_device_info_t *device_handle, fs_packet_union_t *packet_buffer)
+{
+    if (!device_handle || !packet_buffer || device_handle->packet_buf_queue.count == 0)
+        return -1;
+    return (FS_RINGBUFFER_POP(&device_handle->packet_buf_queue, FS_MAX_PACKET_QUEUE_LENGTH, packet_buffer) == true) ? 0 : -1;
+}
+
 int fs_get_orientation(fs_device_info_t *device_handle, fs_quaternion_t *orientation_buffer)
 {
     if (!device_handle || !orientation_buffer || device_handle->packet_buf_queue.count == 0)
