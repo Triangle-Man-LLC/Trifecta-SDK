@@ -7,3 +7,4 @@ dependencies.lock
 .vscode
 .devcontainer
 managed_components/
+*.meta
