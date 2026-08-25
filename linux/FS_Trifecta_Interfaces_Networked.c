@@ -98,8 +98,7 @@ ssize_t fs_listen_for_udp_broadcasts(char ip_addr_list[FS_MAX_NUMBER_DEVICES][64
     // Prepare poll structure
     struct pollfd pfd = {
         .fd = broadcast_sock,
-        .events = POLLIN
-    };
+        .events = POLLIN};
 
     int timeout_ms = timeout_micros / 1000;
     int discovered = 0;
@@ -383,7 +382,6 @@ ssize_t fs_transmit_networked_udp(fs_device_info_t *device_handle, void *tx_buff
     return written;
 }
 
-
 /// @brief Receive data over a networked TCP connection
 /// @param device_handle Pointer to the device information structure
 /// @param rx_buffer Pointer to the receive data buffer
@@ -493,19 +491,31 @@ ssize_t fs_receive_networked_udp(fs_device_info_t *device_handle, void *rx_buffe
 /// @return 0 if successful, -1 if failed.
 int fs_shutdown_network_tcp_driver(fs_device_info_t *device_handle)
 {
-    if (device_handle == NULL || device_handle->device_params.tcp_sock < 0)
+    if (!device_handle || device_handle->device_params.tcp_sock < 0)
     {
         fs_log_output("[Trifecta] Warning: Invalid device handle or TCP socket!");
         return -1;
     }
 
-    if (close(device_handle->device_params.tcp_sock) != 0)
+    int sock = device_handle->device_params.tcp_sock;
+
+    // Signal background thread to stop
+    device_handle->device_params.status = FS_RUN_STATUS_IDLE;
+
+    // Wake up blocking recv() / select()
+    shutdown(sock, SHUT_RDWR);
+
+    // Close socket
+    if (close(sock) != 0)
     {
-        fs_log_output("[Trifecta] Warning: Failed to close TCP socket (socket: %d)! Error: %s", device_handle->device_params.tcp_sock, strerror(errno));
+        fs_log_output("[Trifecta] Warning: Failed to close TCP socket (socket: %d)! Error: %s",
+                      sock, strerror(errno));
         device_handle->device_params.tcp_sock = -1;
         return -1;
     }
+
     device_handle->device_params.tcp_sock = -1;
+    device_handle->device_params.status = FS_RUN_STATUS_IDLE;
     return 0;
 }
 
@@ -514,19 +524,31 @@ int fs_shutdown_network_tcp_driver(fs_device_info_t *device_handle)
 /// @return 0 if successful, -1 if failed.
 int fs_shutdown_network_udp_driver(fs_device_info_t *device_handle)
 {
-    if (device_handle == NULL || device_handle->device_params.udp_sock < 0)
+    if (!device_handle || device_handle->device_params.udp_sock < 0)
     {
         fs_log_output("[Trifecta] Warning: Invalid device handle or UDP socket!");
         return -1;
     }
 
-    if (close(device_handle->device_params.udp_sock) != 0)
+    int sock = device_handle->device_params.udp_sock;
+
+    // Signal background thread to stop
+    device_handle->device_params.status = FS_RUN_STATUS_IDLE;
+
+    // Wake up blocking recvfrom() / select()
+    shutdown(sock, SHUT_RDWR);
+
+    // Close socket
+    if (close(sock) != 0)
     {
-        fs_log_output("[Trifecta] Warning: Failed to close UDP socket (socket: %d)! Error: %s", device_handle->device_params.udp_sock, strerror(errno));
+        fs_log_output("[Trifecta] Warning: Failed to close UDP socket (socket: %d)! Error: %s",
+                      sock, strerror(errno));
         device_handle->device_params.udp_sock = -1;
         return -1;
     }
+
     device_handle->device_params.udp_sock = -1;
+    device_handle->device_params.status = FS_RUN_STATUS_IDLE;
     return 0;
 }
 

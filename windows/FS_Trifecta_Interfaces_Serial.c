@@ -349,6 +349,7 @@ int fs_shutdown_serial_driver(fs_device_info_t *device_handle)
 
     // Stop background thread first
     device_handle->device_params.status = FS_RUN_STATUS_IDLE;
+    CancelIoEx(hSerial, NULL);
 
     // Flush buffers
     PurgeComm(hSerial, PURGE_RXCLEAR | PURGE_TXCLEAR);

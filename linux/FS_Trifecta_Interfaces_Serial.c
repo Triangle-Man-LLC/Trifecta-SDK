@@ -337,6 +337,7 @@ int fs_shutdown_serial_driver(fs_device_info_t *device_handle)
         return -1;
     }
 
+    tcflush(device_handle->device_params.serial_port, TCIOFLUSH);
     if (close(device_handle->device_params.serial_port) != 0)
     {
         fs_log_output("[Trifecta] Warning: Failed to close serial port (port: %d)! Error: %s", device_handle->device_params.serial_port, strerror(errno));
