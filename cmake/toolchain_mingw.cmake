@@ -6,5 +6,8 @@ set(CMAKE_CXX_COMPILER x86_64-w64-mingw32-g++)
 
 set(CMAKE_RC_COMPILER x86_64-w64-mingw32-windres)
 
-set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
-set(CMAKE_SHARED_LINKER_FLAGS "-static-libgcc -static-libstdc++")
+set(CMAKE_C_FLAGS "-DNTDDI_VERSION=0x06000000 -D_WIN32_WINNT=0x0600 ${CMAKE_C_FLAGS}")
+set(CMAKE_CXX_FLAGS "-DNTDDI_VERSION=0x06000000 -D_WIN32_WINNT=0x0600 ${CMAKE_CXX_FLAGS}")
+
+set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++ -lws2_32")
+set(CMAKE_SHARED_LINKER_FLAGS "-static-libgcc -static-libstdc++ -lws2_32")
