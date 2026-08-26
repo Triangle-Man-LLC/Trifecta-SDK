@@ -5,14 +5,14 @@ if(NOT DEFINED STM32_SERIES)
     foreach(dir ${CMAKE_INCLUDE_PATH})
         if(dir MATCHES "STM32F4")
             set(STM32_SERIES "F4")
+        elseif(dir MATCHES "STM32F7")
+            set(STM32_SERIES "F7")
         elseif(dir MATCHES "STM32H7")
             set(STM32_SERIES "H7")
         elseif(dir MATCHES "STM32L4")
             set(STM32_SERIES "L4")
         elseif(dir MATCHES "STM32G4")
             set(STM32_SERIES "G4")
-        elseif(dir MATCHES "STM32F7")
-            set(STM32_SERIES "F7")
         endif()
     endforeach()
 endif()
@@ -25,31 +25,27 @@ endif()
 if(STM32_SERIES STREQUAL "F4" OR
    STM32_SERIES STREQUAL "L4" OR
    STM32_SERIES STREQUAL "G4")
-
     set(CPU_COMPILE_OPTIONS
         -mcpu=cortex-m4
         -mthumb
         -mfpu=fpv4-sp-d16
         -mfloat-abi=hard
     )
-
 elseif(STM32_SERIES STREQUAL "F7" OR
        STM32_SERIES STREQUAL "H7")
-
     set(CPU_COMPILE_OPTIONS
         -mcpu=cortex-m7
         -mthumb
         -mfpu=fpv5-d16
         -mfloat-abi=hard
     )
-
 else()
     message(FATAL_ERROR "Unsupported STM32 series: ${STM32_SERIES}")
 endif()
 
 # Add STM32-specific sources
 file(GLOB_RECURSE TRIFECTA_STM32_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/stm32/${STM32_SERIES}/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/stm32/*.c"
 )
 
 target_sources(DriverTrifecta PRIVATE ${TRIFECTA_STM32_SOURCES})
@@ -58,7 +54,6 @@ target_sources(DriverTrifecta PRIVATE ${TRIFECTA_STM32_SOURCES})
 target_include_directories(DriverTrifecta PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/common
 )
 
 # Compile flags
