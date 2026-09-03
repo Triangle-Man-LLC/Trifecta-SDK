@@ -7,13 +7,12 @@ This repository contains driver software for the <b>Intelligent Sensor Fusion</b
 
 ![CI](https://github.com/Triangle-Man-LLC/Trifecta-Driver/actions/workflows/build_linux.yml/badge.svg)
 ![CI](https://github.com/Triangle-Man-LLC/Trifecta-Driver/actions/workflows/build_windows.yml/badge.svg)
+![CI](https://github.com/Triangle-Man-LLC/Trifecta-Driver/actions/workflows/build_windows_msvc.yml/badge.svg)
 ![CI](https://github.com/Triangle-Man-LLC/Trifecta-Driver/actions/workflows/build_esp-idf.yml/badge.svg)
 ![CI](https://github.com/Triangle-Man-LLC/Trifecta-Driver/actions/workflows/build_android.yml/badge.svg)
 
 ### Installation and Usage ###
-Currently supported platforms are <b><a href = "https://github.com/Triangle-Man-LLC/Trifecta-Driver/tree/esp-idf">ESP-IDF (C/C++)</a></b>, <b><a href = "https://github.com/Triangle-Man-LLC/Trifecta-Driver/tree/linux">Linux (C/C++)</a></b>, <b><a href = "https://github.com/Triangle-Man-LLC/Trifecta-Driver/tree/windows">Windows (C/C++)</a></b>, <b><a href="https://github.com/Triangle-Man-LLC/Trifecta-Python-Samples/tree/main/Trifecta-Python">Python</a></b>, and <b><a href="https://github.com/Triangle-Man-LLC/Trifecta-Python-Samples/tree/main/Trifecta-MicroPython">Micropython</a></b>. (Platforms with in-progress support: <b><a href="https://github.com/Triangle-Man-LLC/Trifecta-Driver/tree/stm32">STM32 (C/C++)</a></b>, <b><a href = "https://github.com/Triangle-Man-LLC/Trifecta-Driver/tree/android">Android (NDK)</a></b>.) 
-
-Platform-specific installation instructions are located in the README.md of their respective folders. A recommended deployment platform should be at least 32-bit processor with clock speed of 40 MHz and 64 kB of memory.
+Currently supported platforms/languages are <b>ESP-IDF (C/C++)</b>, <b>Linux (C/C++)</b>, <b>Windows (C/C++)</b>. (Platforms/languages with in-progress support: <b>STM32 (C/C++)</b>, <b>Android (NDK)</b>, <b>Python</b>, <b>Micropython</b>, <b>C#</b>.) 
 
 ### Porting the Drivers to Another Platform ###
 
