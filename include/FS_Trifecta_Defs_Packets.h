@@ -33,27 +33,20 @@
 
 #if defined(_MSC_VER)
 
-    #ifdef __cplusplus
-        // MSVC C++ mode: static_assert is available
-        #define FS_STATIC_ASSERT(cond, msg) static_assert((cond), msg)
-    #else
-        // MSVC C mode: typedef trick WITHOUT token pasting the message
-        #define FS_STATIC_ASSERT(cond, msg) \
-            typedef char static_assertion_failed[(cond) ? 1 : -1]
-    #endif
-
-#elif defined(__cplusplus)
-
-    // GCC/Clang C++
-    #define FS_STATIC_ASSERT(cond, msg) static_assert((cond), msg)
-
+#ifdef __cplusplus
+#define FS_STATIC_ASSERT(cond, msg) static_assert((cond), msg)
 #else
-
-    // GCC/Clang C11 C
-    #define FS_STATIC_ASSERT(cond, msg) _Static_assert((cond), msg)
-
+#define FS_STATIC_ASSERT(cond, msg) \
+    typedef char static_assertion_failed[(cond) ? 1 : -1]
 #endif
 
+#elif defined(__cplusplus)
+#define FS_STATIC_ASSERT(cond, msg) static_assert((cond), msg)
+
+#else
+#define FS_STATIC_ASSERT(cond, msg) _Static_assert((cond), msg)
+
+#endif
 
 #ifdef __cplusplus
 extern "C"
@@ -162,6 +155,7 @@ extern "C"
         FS_DEVICE_DIAG_GNSS_RTK_EXT = 0x80,   // GNSS RTK is fixed on external base station (e.g. valid RTCM input received)
     } fs_device_diagnostic_flags_t;
 
+    /// @brief Verbose packet which includes raw measurements. Should only be used at a data rate <= 200 Hz to prevent bus saturation.
     FS_PACKED_BEGIN
     struct fs_imu_composite_packet
     {
@@ -218,6 +212,7 @@ extern "C"
     typedef struct fs_imu_composite_packet fs_imu_composite_packet_t;
     FS_STATIC_ASSERT(sizeof(fs_imu_composite_packet_t) == 145, "fs_imu_composite_packet_t size mismatch");
 
+    /// @brief Simplified packet which excludes raw measurements. Usable up to 1 kHz output rate.
     FS_PACKED_BEGIN
     struct fs_imu_regular_packet
     {
@@ -257,6 +252,8 @@ extern "C"
     typedef struct fs_imu_regular_packet fs_imu_regular_packet_t;
     FS_STATIC_ASSERT(sizeof(fs_imu_regular_packet_t) == 85, "fs_imu_regular_packet_t size mismatch");
 
+    /// @brief Verbose packet which includes raw measurements and GNSS data. Should only be used at a data rate <= 200 Hz to prevent bus saturation.
+    /// Only applies to systems with a valid GNSS receiver.
     FS_PACKED_BEGIN
     struct fs_imu_composite_packet_2
     {
@@ -321,6 +318,8 @@ extern "C"
     typedef struct fs_imu_composite_packet_2 fs_imu_composite_packet_2_t;
     FS_STATIC_ASSERT(sizeof(fs_imu_composite_packet_2_t) == 181, "fs_imu_composite_packet_2_t size mismatch");
 
+    /// @brief Verbose packet which includes raw measurements. Should only be used at a data rate <= 200 Hz to prevent bus saturation.
+    /// 64-bit timestamp version, on newer firmware versions which support 64-bit UTC time.
     FS_PACKED_BEGIN
     struct fs_imu_composite_packet_64
     {
@@ -377,6 +376,8 @@ extern "C"
     typedef struct fs_imu_composite_packet_64 fs_imu_composite_packet_64_t;
     FS_STATIC_ASSERT(sizeof(fs_imu_composite_packet_64_t) == 149, "fs_imu_composite_packet_64_t size mismatch");
 
+    /// @brief Simplified packet which excludes raw measurements. Usable up to 1 kHz output rate.
+    /// 64-bit timestamp version, on newer firmware versions which support 64-bit UTC time.
     FS_PACKED_BEGIN
     struct fs_imu_regular_packet_64
     {
@@ -416,6 +417,8 @@ extern "C"
     typedef struct fs_imu_regular_packet_64 fs_imu_regular_packet_64_t;
     FS_STATIC_ASSERT(sizeof(fs_imu_regular_packet_64_t) == 89, "fs_imu_regular_packet_64_t size mismatch");
 
+    /// @brief Verbose packet which includes raw measurements and GNSS data. Should only be used at a data rate <= 200 Hz to prevent bus saturation.
+    /// 64-bit timestamp version, on newer firmware versions which support 64-bit UTC time.
     FS_PACKED_BEGIN
     struct fs_imu_composite_packet_64_2
     {
@@ -480,6 +483,7 @@ extern "C"
     typedef struct fs_imu_composite_packet_64_2 fs_imu_composite_packet_64_2_t;
     FS_STATIC_ASSERT(sizeof(fs_imu_composite_packet_64_2_t) == 185, "fs_imu_composite_packet_64_2_t size mismatch");
 
+    /// @brief Shared data structure for all packet types.
     FS_PACKED_BEGIN
     union fs_packet_union
     {
@@ -493,6 +497,7 @@ extern "C"
     typedef union fs_packet_union fs_packet_union_t;
     FS_STATIC_ASSERT(sizeof(fs_packet_union_t) == 185, "fs_packet_union_t size mismatch");
 
+    /// @brief UDP broadcast packet for fast device identification over the LAN.
     FS_PACKED_BEGIN
     struct fs_device_broadcast_information_packet
     {
