@@ -2,341 +2,93 @@
 /// Copyright 2026 4rge.ai and/or Triangle Man LLC
 /// Usage and redistribution of this code is permitted
 /// but this notice must be retained in all copies of the code.
-
+///
 /// THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
 /// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
 /// AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
 /// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 /// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "cmsis_os.h"
-
-// Include the HAL library header based on the target STM32 series
-#if defined(STM32F0xx)
-#include "stm32f0xx_hal.h"
-#elif defined(STM32F1xx)
-#include "stm32f1xx_hal.h"
-#elif defined(STM32F2xx)
-#include "stm32f2xx_hal.h"
-#elif defined(STM32F3xx)
-#include "stm32f3xx_hal.h"
-#elif defined(STM32F4xx)
-#include "stm32f4xx_hal.h"
-#elif defined(STM32F7xx)
-#include "stm32f7xx_hal.h"
-#elif defined(STM32H7xx)
-#include "stm32h7xx_hal.h"
-#elif defined(STM32L0xx)
-#include "stm32l0xx_hal.h"
-#elif defined(STM32L1xx)
-#include "stm32l1xx_hal.h"
-#elif defined(STM32L4xx)
-#include "stm32l4xx_hal.h"
-#elif defined(STM32L5xx)
-#include "stm32l5xx_hal.h"
-#else
-#error "Unsupported STM32 series"
-#endif
-
-#include "FS_Trifecta_Defs.h"
 #include "FS_Trifecta_Interfaces.h"
 
-// Platform-specific: Functions for initializing communication drivers on target platform
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
 
-int fs_logging_level = 0; // Logging level - 0 = OFF, 1 = ON
+#include "cmsis_os2.h"
 
-/// @brief Start the network TCP driver.
-/// @param device_handle Pointer to the device information structure
-/// @return 0 on success, -1 on failure
-int fs_init_network_tcp_driver(fs_device_info_t *device_handle)
-{
-    fs_log_output("[Trifecta] Error: STM32 does not support Wifi!\n");
-    return -1;
-}
-
-/// @brief Start the network UDP driver.
-/// @param device_handle Pointer to the device information structure
-/// @return 0 on success, -1 on failure
-int fs_init_network_udp_driver(fs_device_info_t *device_handle)
-{
-    fs_log_output("[Trifecta] Error: STM32 does not support Wifi!\n");
-    return -1;
-}
-
-/// @brief Start the network serial driver.
-/// @param device_handle
-/// @return
-int fs_init_serial_driver(fs_device_info_t *device_handle)
-{
-    // On FreeRTOS/microcontroller systems, the serial port is usually a fixed number, so port scanning will not be done
-    // Only check to ensure that the serial port was previously set up
-    if (device_handle->device_params.serial_port < 0)
-    {
-        fs_log_output("[Trifecta] Serial port number cannot be less than zero!");
-        return -1;
-    }
-    return 0;
-}
+int fs_logging_level = 0; // 0 = OFF, 1 = ON
 
 /// @brief Platform-specific start thread given a function handle.
 /// @param thread_func Pointer to the thread function handle.
 /// @param params Parameters to pass to the thread function.
 /// @param thread_running_flag Pointer to the flag used to indicate thread status.
-/// @param stack_size Size of the stack allocated for the thread.
+/// @param thread_handle Pointer to the task handle.
+/// @param stack_size Size of the stack allocated for the thread (in words or bytes depending on config).
 /// @param priority Priority level of the thread.
-/// @param core_affinity -1 for indifference, else preferred core number
-/// @return Status of the thread creation (0 for success, -1 for failure).
-int fs_thread_start(void(thread_func)(void *), void *params, bool *thread_running_flag, size_t stack_size, int priority, int core_affinity)
+/// @param core_affinity -1 for indifference, else preferred core number (ignored on STM32/CMSIS-RTOS2).
+/// @return 0 on success, -1 on failure.
+int fs_thread_start(void (*thread_func)(void *),
+                    void *params,
+                    fs_run_status_t *thread_running_flag,
+                    fs_thread_t *thread_handle,
+                    size_t stack_size,
+                    int priority,
+                    int core_affinity)
 {
+    (void)core_affinity; // CMSIS-RTOS2 on STM32 has no core affinity
+
     if (thread_func == NULL || thread_running_flag == NULL)
     {
-        fs_log_output("[Trifecta] Error: Invalid thread function or running flag!\n");
+        fs_log_critical("[Trifecta] Error: Invalid thread function or running flag!\n");
         return -1;
     }
 
-    else if (thread_running_flag != NULL && *thread_running_flag != 0)
+    if (thread_handle == NULL)
     {
-        fs_log_output("[Trifecta] Warning: Thread start aborted, thread was already running!\n");
-        return 0; // Thread already running
+        fs_log_output("[Trifecta] Warning: No task handle provided! This could interrupt certain functions.\n");
     }
 
-    // Ensure the flag is set to indicate the thread is running
-    *thread_running_flag = true;
+    osThreadAttr_t attr;
+    memset(&attr, 0, sizeof(attr));
+    attr.name = "TrifectaThread";
+    attr.priority = (osPriority_t)priority;
+    attr.stack_size = stack_size;
 
-    osThreadAttr_t thread_attr = {
-        .name = "ThreadTask",
-        .priority = (osPriority_t)priority,
-        .stack_size = stack_size};
-
-    if (core_affinity < 0)
+    osThreadId_t tid = osThreadNew((osThreadFunc_t)thread_func, params, &attr);
+    if (tid == NULL)
     {
-        thread_attr.attr_bits = 0;
-    }
-    else
-    {
-        fs_log_output("[Trifecta] Warning: STM32 does not support multi-core operation in this manner!\n");
-    }
-
-    osThreadId_t task_handle = osThreadNew(thread_func, params, &thread_attr);
-
-    if (task_handle == NULL)
-    {
-        fs_log_output("[Trifecta] Error: Task creation failed!\n");
-        *thread_running_flag = 0;
+        fs_log_output("[Trifecta] Error: Thread creation failed!\n");
+        *thread_running_flag = FS_RUN_STATUS_ERROR;
         return -1;
     }
 
+    if (thread_handle)
+    {
+        thread_handle->handle = tid;
+    }
+
+    *thread_running_flag = FS_RUN_STATUS_RUNNING;
     return 0;
 }
 
-/// @brief Some platforms (e.g. FreeRTOS) require thread exit to be properly handled.
-/// This function should implement that behavior.
-/// @return Should always return 0...
-int fs_thread_exit()
+/// @brief Properly exit/delete a thread.
+/// @param thread_handle Pointer to the thread handle (optional).
+/// @return 0 on success.
+int fs_thread_exit(void *thread_handle)
 {
-    osThreadId_t tid = osThreadGetId();
-    osThreadTerminate(tid);
-    return 0;
-}
-
-/// @brief Transmit data over a networked TCP connection
-/// @param device_handle Pointer to the device information structure
-/// @param tx_buffer Pointer to the transmit data buffer
-/// @param length_bytes The size of the tx_buffer
-/// @param timeout_micros The max amount of time to wait (microseconds)
-/// @return -1 if failed, else number of bytes written
-ssize_t fs_transmit_networked_tcp(fs_device_info_t *device_handle, void *tx_buffer, size_t length_bytes, int timeout_micros)
-{
-    fs_log_output("[Trifecta] Error: STM32 does not support Wifi!\n");
-    return -1;
-}
-
-/// @brief Transmit data over a networked UDP connection
-/// @param device_handle Pointer to the device information structure
-/// @param tx_buffer Pointer to the transmit data buffer
-/// @param length_bytes The size of the tx_buffer
-/// @param timeout_micros The max amount of time to wait (microseconds)
-/// @return -1 if failed, else number of bytes written
-ssize_t fs_transmit_networked_udp(fs_device_info_t *device_handle, void *tx_buffer, size_t length_bytes, int timeout_micros)
-{
-    fs_log_output("[Trifecta] Error: STM32 does not support Wifi!\n");
-    return -1;
-}
-
-/// @brief Transmit data over serial communication
-/// @param device_handle Pointer to the device information structure
-/// @param tx_buffer Pointer to the transmit data buffer
-/// @param length_bytes The size of the tx_buffer
-/// @param timeout_micros The max amount of time to wait (microseconds)
-/// @return -1 if failed, else number of bytes written
-ssize_t fs_transmit_serial(fs_device_info_t *device_handle, void *tx_buffer, size_t length_bytes, int timeout_micros)
-{
-    if (device_handle == NULL)
+    if (thread_handle == NULL)
     {
-        fs_log_output("[Trifecta] Error: Device handle is NULL!");
-        return -1;
+        osThreadExit();
+        return 0;
     }
 
-    if (device_handle->device_params.communication_mode != FS_COMMUNICATION_MODE_UART &&
-        device_handle->device_params.communication_mode != FS_COMMUNICATION_MODE_USB_CDC &&
-        device_handle->device_params.communication_mode != FS_COMMUNICATION_MODE_I2C &&
-        device_handle->device_params.communication_mode != FS_COMMUNICATION_MODE_SPI)
+    osThreadId_t tid = *(osThreadId_t *)thread_handle;
+    if (tid != NULL)
     {
-        fs_log_output("[Trifecta] Error: Invalid communication mode! Expected COMMUNICATION_MODE_SERIAL.");
-        return -1;
+        osThreadTerminate(tid);
     }
-
-    if (device_handle->device_params.serial_port < 0)
-    {
-        fs_log_output("[Trifecta] Error: Invalid serial port!");
-        return -1;
-    }
-
-    if (tx_buffer == NULL)
-    {
-        fs_log_output("[Trifecta] Error: Transmit buffer is NULL!");
-        return -1;
-    }
-
-    // TODO: Add support for USB-CDC/SPI/I2C
-    UART_HandleTypeDef *huart = (UART_HandleTypeDef *)device_handle->device_params.serial_port;
-    HAL_StatusTypeDef status = HAL_UART_Transmit(huart, (uint8_t *)tx_buffer, length_bytes, timeout_micros / 1000);
-
-    if (status != HAL_OK)
-    {
-        fs_log_output("[Trifecta] Error: Writing data over serial failed!");
-        return -1;
-    }
-
-    fs_log_output("[Trifecta] Serial transmit to port %d - Length %ld - data %s", (int)huart->Instance, (long)length_bytes, (char *)tx_buffer);
-
-    return (ssize_t)length_bytes;
-}
-
-/// @brief Receive data over a networked TCP connection
-/// @param device_handle Pointer to the device information structure
-/// @param rx_buffer Pointer to the receive data buffer
-/// @param length_bytes The max size of the rx_buffer
-/// @param timeout_micros The max amount of time to wait (microseconds)
-/// @return -1 if failed, else number of bytes received
-ssize_t fs_receive_networked_tcp(fs_device_info_t *device_handle, void *rx_buffer, size_t length_bytes, int timeout_micros)
-{
-    fs_log_output("[Trifecta] Error: STM32 does not support Wifi!\n");
-    return -1;
-}
-
-/// @brief Receive data over a networked UDP connection
-/// @param device_handle Pointer to the device information structure
-/// @param rx_buffer Pointer to the receive data buffer
-/// @param length_bytes The max size of the rx_buffer
-/// @param timeout_micros The max amount of time to wait (microseconds)
-/// @return -1 if failed, else number of bytes received
-ssize_t fs_receive_networked_udp(fs_device_info_t *device_handle, void *rx_buffer, size_t length_bytes, int timeout_micros)
-{
-    fs_log_output("[Trifecta] Error: STM32 does not support Wifi!\n");
-    return -1;
-}
-
-/// @brief Receive data over serial communication
-/// @param device_handle Pointer to the device information structure
-/// @param rx_buffer Pointer to the receive data buffer
-/// @param length_bytes The max size of the rx_buffer
-/// @param timeout_micros The max amount of time to wait (microseconds)
-/// @return -1 if failed, else number of bytes received
-ssize_t fs_receive_serial(fs_device_info_t *device_handle, void *rx_buffer, size_t length_bytes, int timeout_micros)
-{
-    if (device_handle == NULL)
-    {
-        fs_log_output("[Trifecta] Error: Device handle is NULL!");
-        return -1;
-    }
-
-    if (device_handle->device_params.communication_mode != FS_COMMUNICATION_MODE_UART ||
-        device_handle->device_params.communication_mode != FS_COMMUNICATION_MODE_USB_CDC ||
-        device_handle->device_params.communication_mode != FS_COMMUNICATION_MODE_I2C ||
-        device_handle->device_params.communication_mode != FS_COMMUNICATION_MODE_SPI)
-    {
-        fs_log_output("[Trifecta] Error: Invalid communication mode! Expected COMMUNICATION_MODE_SERIAL.");
-        return -1;
-    }
-    if (device_handle->device_params.serial_port < 0)
-    {
-        fs_log_output("[Trifecta] Error: Invalid serial port!");
-        return -1;
-    }
-
-    if (rx_buffer == NULL)
-    {
-        fs_log_output("[Trifecta] Error: Receive buffer is NULL!");
-        return -1;
-    }
-
-    // Assuming 'device_handle->device_params.serial_port' holds the UART handle (e.g., &huart1 for UART1)
-    UART_HandleTypeDef *huart = (UART_HandleTypeDef *)device_handle->device_params.serial_port;
-
-    // Receive data over UART
-    HAL_StatusTypeDef status = HAL_UART_Receive(huart, (uint8_t *)rx_buffer, length_bytes, timeout_micros / 1000);
-
-    if (status == HAL_OK)
-    {
-        ssize_t rx_len = length_bytes; // Number of bytes received
-        fs_log_output("[Trifecta] Read data from port %d - length %ld!", (int)huart->Instance, (long)rx_len);
-        return rx_len;
-    }
-    else
-    {
-        fs_log_output("[Trifecta] Error: Reading data over serial failed!");
-        return -1;
-    }
-}
-
-/// @brief Shutdown the network TCP driver.
-/// @param device_handle Pointer to the device information structure.
-/// @return 0 if successful, -1 if failed.
-int fs_shutdown_network_tcp_driver(fs_device_info_t *device_handle)
-{
-    device_handle->tcp_sock = -1;
-    return 0;
-}
-
-/// @brief Shutdown the network UDP driver.
-/// @param device_handle Pointer to the device information structure.
-/// @return 0 if successful, -1 if failed.
-int fs_shutdown_network_udp_driver(fs_device_info_t *device_handle)
-{
-    device_handle->udp_sock = -1;
-    return 0;
-}
-
-/// @brief Shutdown the serial driver.
-/// @param device_handle Pointer to the device information structure.
-/// @return 0 if successful, -1 if failed.
-int fs_shutdown_serial_driver(fs_device_info_t *device_handle)
-{
-    if (device_handle == NULL)
-    {
-        fs_log_output("[Trifecta] Error: Device handle is NULL!");
-        return -1;
-    }
-
-    if (device_handle->device_params.serial_port < 0)
-    {
-        fs_log_output("[Trifecta] Error: Invalid serial port!");
-        return -1;
-    }
-
-    // Assuming 'device_handle->device_params.serial_port' holds the UART handle (e.g., &huart1 for UART1)
-    UART_HandleTypeDef *huart = (UART_HandleTypeDef *)device_handle->device_params.serial_port;
-
-    // Deinitialize the UART
-    if (HAL_UART_DeInit(huart) != HAL_OK)
-    {
-        fs_log_output("[Trifecta] Warning: Failed to deinitialize UART driver (serial port: %d)!", (int)huart->Instance);
-        device_handle->device_params.serial_port = -1;
-        return -1;
-    }
-
-    device_handle->device_params.serial_port = -1;
     return 0;
 }
 
@@ -356,31 +108,27 @@ int fs_log_output(const char *format, ...)
     va_list args;
     va_start(args, format);
 
-    // Print formatted string
     chars_printed = vprintf(format, args);
-
-    // Flush stdout to ensure output is available
     fflush(stdout);
 
-    // If last char wasn't newline, add one
-    if (chars_printed > 0) {
-        // Use fputc instead of indexing format
-        if (ferror(stdout) == 0) {
-            // Can't directly check last char printed, so safer approach:
-            // Always append newline unless format already ends with '\n'
-            size_t len = strlen(format);
-            if (len == 0 || format[len - 1] != '\n') {
-                putchar('\n');
-                chars_printed++;
-            }
+    if (chars_printed > 0)
+    {
+        size_t len = strlen(format);
+        if (len == 0 || format[len - 1] != '\n')
+        {
+            putchar('\n');
+            chars_printed++;
         }
     }
-    // Flush stdout to ensure output is available
-    fflush(stdout);
+
     va_end(args);
     return chars_printed;
 }
 
+/// @brief Logs output regardless of logging level.
+/// @param format Format string.
+/// @param ... Additional arguments.
+/// @return Number of characters printed.
 int fs_log_critical(const char *format, ...)
 {
     int chars_printed = 0;
@@ -388,23 +136,16 @@ int fs_log_critical(const char *format, ...)
     va_list args;
     va_start(args, format);
 
-    // Print formatted string
     chars_printed = vprintf(format, args);
-
-    // Flush stdout to ensure output is available
     fflush(stdout);
 
-    // If last char wasn't newline, add one
-    if (chars_printed > 0) {
-        // Use fputc instead of indexing format
-        if (ferror(stdout) == 0) {
-            // Can't directly check last char printed, so safer approach:
-            // Always append newline unless format already ends with '\n'
-            size_t len = strlen(format);
-            if (len == 0 || format[len - 1] != '\n') {
-                putchar('\n');
-                chars_printed++;
-            }
+    if (chars_printed > 0)
+    {
+        size_t len = strlen(format);
+        if (len == 0 || format[len - 1] != '\n')
+        {
+            putchar('\n');
+            chars_printed++;
         }
     }
 
@@ -412,65 +153,94 @@ int fs_log_critical(const char *format, ...)
     return chars_printed;
 }
 
-/// @brief Toggle logging (you may want to turn it off in some systems to avoid flooding the serial output)
-/// @param do_log TRUE to turn log on, FALSE to turn log off
-/// @return 1 if logging turned on, 0 if logging turned off
+/// @brief Toggle logging.
+/// @param do_log TRUE to turn log on, FALSE to turn log off.
+/// @return 1 if logging turned on, 0 if logging turned off.
 int fs_toggle_logging(bool do_log)
 {
     fs_logging_level = do_log ? 1 : 0;
     return fs_logging_level;
 }
 
-/// @brief Delay by at least this amount of time
-/// @param millis Number of milliseconds to delay
-/// @return The number of ticks the delay lasted
+/// @brief Delay by at least this amount of time.
+/// @param millis Number of milliseconds to delay.
+/// @return The number of ticks the delay lasted.
 int fs_delay(int millis)
 {
-    osDelay(millis);
-    return osKernelSysTick();
+    uint32_t freq = osKernelGetTickFreq();    // ticks per second
+    uint32_t ticks = (millis * freq) / 1000U; // ms → ticks
+
+    osDelay(ticks);
+    return (int)ticks;
 }
 
-/// @brief Real-time delay
-/// @param current_time Pointer to the current time
-/// @param millis The exact amount of time to delay
-/// @return The number of ticks the delay lasted
+/// @brief Real-time delay relative to a stored time.
+/// @param current_time Pointer to the current time (tick count).
+/// @param millis The exact amount of time to delay.
+/// @return The number of ticks the delay lasted.
 int fs_delay_for(uint64_t *current_time, int millis)
 {
+    if (!current_time)
+        return -1;
+
+    uint32_t freq = osKernelGetTickFreq();          // ticks per second
+    uint32_t delay_ticks = (millis * freq) / 1000U; // ms → ticks
+
     if (*current_time == 0)
     {
-        *current_time = osKernelSysTick();
+        *current_time = (uint64_t)osKernelGetTickCount();
     }
+
     uint64_t initial_time = *current_time;
-    osDelayUntil(current_time, millis);
+    uint32_t start_ticks = (uint32_t)*current_time;
+
+    osDelayUntil(start_ticks + delay_ticks);
+
+    *current_time = (uint64_t)osKernelGetTickCount();
     uint64_t elapsed_ticks = *current_time - initial_time;
     return (int)elapsed_ticks;
 }
 
-/// @brief Get the current system time
-/// @param current_time Pointer to the current time
-/// @return 0 on success
+/// @brief Get the current system time (tick count).
+/// @param current_time Pointer to the current time.
+/// @return 0 on success.
 int fs_get_current_time(uint64_t *current_time)
 {
-    *current_time = osKernelSysTick();
+    if (!current_time)
+        return -1;
+
+    *current_time = (uint64_t)osKernelGetTickCount();
     return 0;
 }
 
+/// @brief Get local wall-clock time (if RTC/time is available).
+/// @param out Pointer to fs_tm_t to fill.
+/// @return 0 on success, -1 on failure.
 int fs_get_local_time(fs_tm_t *out)
 {
     if (!out)
         return -1;
 
     time_t t = time(NULL);
+    if (t == (time_t)-1)
+        return -1;
+
     struct tm tmv;
-
+#if defined(_POSIX_THREAD_SAFE_FUNCTIONS) || defined(__USE_MISC)
     localtime_r(&t, &tmv);
+#else
+    const struct tm *ptm = localtime(&t);
+    if (!ptm)
+        return -1;
+    tmv = *ptm;
+#endif
 
-    out->year  = tmv.tm_year + 1900;
+    out->year = tmv.tm_year + 1900;
     out->month = tmv.tm_mon + 1;
-    out->day   = tmv.tm_mday;
-    out->hour  = tmv.tm_hour;
-    out->min   = tmv.tm_min;
-    out->sec   = tmv.tm_sec;
+    out->day = tmv.tm_mday;
+    out->hour = tmv.tm_hour;
+    out->min = tmv.tm_min;
+    out->sec = tmv.tm_sec;
 
     return 0;
 }
