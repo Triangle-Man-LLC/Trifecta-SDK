@@ -1,43 +1,133 @@
-/// Driver for the Trifecta series of IMU/AHRS/INS devices
-/// Copyright 2026 4rge.ai and/or Triangle Man LLC
-/// Usage and redistribution of this code is permitted
-/// but this notice must be retained in all copies of the code.
-
-/// THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-/// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
-/// AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-/// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-/// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
 #ifndef TRIFECTA_DEFS_RINGBUFFER_H
 #define TRIFECTA_DEFS_RINGBUFFER_H
 
+#include <stdint.h>
+#include <stdbool.h>
+
+#if defined(__cplusplus)
+#include <atomic>
+typedef std::atomic<uint16_t> trifecta_atomic_u16;
+#else
 #include <stdatomic.h>
+typedef _Atomic uint16_t trifecta_atomic_u16;
+#endif
 
 /// @brief Ringbuffer generator.
 #define FS_RINGBUFFER_DECLARE(type, name, size) \
     typedef struct                              \
     {                                           \
         type buffer[size];                      \
-        _Atomic uint16_t head;                  \
-        _Atomic uint16_t tail;                  \
-        _Atomic uint16_t count;                 \
+        trifecta_atomic_u16 head;               \
+        trifecta_atomic_u16 tail;               \
+        trifecta_atomic_u16 count;              \
     } name
 
-/// @section Packet ring buffer functions (implemented using MACROS to allow use with all fs_ringbuffers)
+/// @section Packet ring buffer functions
+
+#if defined(__cplusplus)
+
+// -------------------------
+// C++ IMPLEMENTATION
+// -------------------------
+
 #define FS_RINGBUFFER_INIT(rb) \
     do                         \
     {                          \
-        (rb)->head = 0;        \
-        (rb)->tail = 0;        \
-        (rb)->count = 0;       \
+        (rb)->head.store(0);   \
+        (rb)->tail.store(0);   \
+        (rb)->count.store(0);  \
     } while (0)
 
-/// @brief Ringbuffer push
-/// @param rb Ringbuffer handle
-/// @param buffer_size Ringbuffer size
-/// @param value_ptr Pointer to the thing to enqueue
-/// @return TRUE on success, FALSE if failed (out of space)
+#define FS_RINGBUFFER_PUSH(rb, buffer_size, value_ptr)                               \
+    ({                                                                               \
+        bool success = false;                                                        \
+        uint16_t old_count = (rb)->count.load(std::memory_order_acquire);            \
+        if (old_count < (buffer_size))                                               \
+        {                                                                            \
+            uint16_t head = (rb)->head.load(std::memory_order_relaxed);              \
+            (rb)->buffer[head] = *(value_ptr);                                       \
+            (rb)->head.store((head + 1) % (buffer_size), std::memory_order_release); \
+            (rb)->count.fetch_add(1, std::memory_order_release);                     \
+            success = true;                                                          \
+        }                                                                            \
+        success;                                                                     \
+    })
+
+#define FS_RINGBUFFER_PUSH_FORCE(rb, buffer_size, value_ptr)                         \
+    ({                                                                               \
+        uint16_t head = (rb)->head.load(std::memory_order_relaxed);                  \
+        (rb)->buffer[head] = *(value_ptr);                                           \
+        (rb)->head.store((head + 1) % (buffer_size), std::memory_order_release);     \
+                                                                                     \
+        uint16_t old_count = (rb)->count.load(std::memory_order_acquire);            \
+        if (old_count < (buffer_size))                                               \
+        {                                                                            \
+            (rb)->count.fetch_add(1, std::memory_order_release);                     \
+        }                                                                            \
+        else                                                                         \
+        {                                                                            \
+            uint16_t tail = (rb)->tail.load(std::memory_order_relaxed);              \
+            (rb)->tail.store((tail + 1) % (buffer_size), std::memory_order_release); \
+        }                                                                            \
+        true;                                                                        \
+    })
+
+#define FS_RINGBUFFER_POP(rb, buffer_size, out_ptr)                                  \
+    ({                                                                               \
+        bool success = false;                                                        \
+        uint16_t old_count = (rb)->count.load(std::memory_order_acquire);            \
+        if (old_count > 0)                                                           \
+        {                                                                            \
+            uint16_t tail = (rb)->tail.load(std::memory_order_relaxed);              \
+            *(out_ptr) = (rb)->buffer[tail];                                         \
+            (rb)->tail.store((tail + 1) % (buffer_size), std::memory_order_release); \
+            (rb)->count.fetch_sub(1, std::memory_order_release);                     \
+            success = true;                                                          \
+        }                                                                            \
+        success;                                                                     \
+    })
+
+#define FS_RINGBUFFER_PEEK(rb, out_ptr)                                   \
+    ({                                                                    \
+        bool success = false;                                             \
+        uint16_t old_count = (rb)->count.load(std::memory_order_acquire); \
+        if (old_count > 0)                                                \
+        {                                                                 \
+            uint16_t tail = (rb)->tail.load(std::memory_order_relaxed);   \
+            *(out_ptr) = (rb)->buffer[tail];                              \
+            success = true;                                               \
+        }                                                                 \
+        success;                                                          \
+    })
+
+#define FS_RINGBUFFER_PEEK_AT(rb, buffer_size, index, out_ptr)            \
+    ({                                                                    \
+        bool success = false;                                             \
+        uint16_t old_count = (rb)->count.load(std::memory_order_acquire); \
+        if ((index) < old_count)                                          \
+        {                                                                 \
+            uint16_t tail = (rb)->tail.load(std::memory_order_relaxed);   \
+            uint16_t pos = (tail + (index)) % (buffer_size);              \
+            *(out_ptr) = (rb)->buffer[pos];                               \
+            success = true;                                               \
+        }                                                                 \
+        success;                                                          \
+    })
+
+#else
+
+// -------------------------
+// PURE C IMPLEMENTATION
+// -------------------------
+
+#define FS_RINGBUFFER_INIT(rb)         \
+    do                                 \
+    {                                  \
+        atomic_store(&(rb)->head, 0);  \
+        atomic_store(&(rb)->tail, 0);  \
+        atomic_store(&(rb)->count, 0); \
+    } while (0)
+
 #define FS_RINGBUFFER_PUSH(rb, buffer_size, value_ptr)             \
     ({                                                             \
         bool success = false;                                      \
@@ -53,11 +143,6 @@
         success;                                                   \
     })
 
-/// @brief Ringbuffer push, but overwrite oldest element if full
-/// @param rb Ringbuffer handle
-/// @param buffer_size Ringbuffer size
-/// @param value_ptr Pointer to the thing to enqueue
-/// @return TRUE on success (always)
 #define FS_RINGBUFFER_PUSH_FORCE(rb, buffer_size, value_ptr)       \
     ({                                                             \
         uint16_t head = atomic_load(&(rb)->head);                  \
@@ -77,11 +162,6 @@
         true;                                                      \
     })
 
-/// @brief Ringbuffer pop
-/// @param rb Ringbuffer handle
-/// @param buffer_size Ringbuffer size
-/// @param value_ptr Pointer to the thing to dequeue
-/// @return TRUE on success, FALSE if failed (no items)
 #define FS_RINGBUFFER_POP(rb, buffer_size, out_ptr)                \
     ({                                                             \
         bool success = false;                                      \
@@ -97,10 +177,6 @@
         success;                                                   \
     })
 
-/// @brief Ringbuffer peek
-/// @param rb Ringbuffer handle
-/// @param out_ptr Pointer to the thing to enqueue
-/// @return TRUE on success, FALSE if failed (no items)
 #define FS_RINGBUFFER_PEEK(rb, out_ptr)                 \
     ({                                                  \
         bool success = false;                           \
@@ -114,10 +190,6 @@
         success;                                        \
     })
 
-/// @brief Ringbuffer peek, but at an indicated index
-/// @param rb Ringbuffer handle
-/// @param out_ptr Pointer to the thing to enqueue
-/// @return TRUE on success, FALSE if failed (no items)
 #define FS_RINGBUFFER_PEEK_AT(rb, buffer_size, index, out_ptr) \
     ({                                                         \
         bool success = false;                                  \
@@ -132,4 +204,6 @@
         success;                                               \
     })
 
-#endif
+#endif // C++ / C mode
+
+#endif // TRIFECTA_DEFS_RINGBUFFER_H
